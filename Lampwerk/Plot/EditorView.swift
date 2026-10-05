@@ -97,6 +97,13 @@ struct EditorView: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
             }
+            // Fade the edges so a cut-off chip reads as "scroll for more".
+            .mask {
+                LinearGradient(stops: [
+                    .init(color: .clear, location: 0), .init(color: .black, location: 0.04),
+                    .init(color: .black, location: 0.9), .init(color: .clear, location: 1),
+                ], startPoint: .leading, endPoint: .trailing)
+            }
             Divider().overlay(Palette.rule)
 
             if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
