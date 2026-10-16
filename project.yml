@@ -2,7 +2,7 @@
 #   brew install xcodegen && xcodegen
 name: Lampwerk
 options:
-  bundleIdPrefix: app.lampwerk
+  bundleIdPrefix: com.lampwerk
   deploymentTarget:
     iOS: "17.0"
 targets:
@@ -12,7 +12,7 @@ targets:
     sources: [Lampwerk]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.lampwerk.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.lampwerk.app
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.0"
