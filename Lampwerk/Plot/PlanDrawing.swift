@@ -77,7 +77,7 @@ enum PlanDrawing {
         // Beams under everything.
         for item in plot.items where plot.isOn(item) {
             guard let lamp = item.lamp else { continue }
-            ctx.fill(beam(item, lamp, v), with: .color(ink.beam))
+            ctx.fill(beam(item, lamp, v, spread: LightMath.spread(item, in: plot)), with: .color(ink.beam))
         }
 
         // Walls.
@@ -111,14 +111,15 @@ enum PlanDrawing {
         }
     }
 
-    static func beam(_ item: PlacedLamp, _ lamp: Lamp, _ v: PlanViewport) -> Path {
+    static func beam(_ item: PlacedLamp, _ lamp: Lamp, _ v: PlanViewport, spread: Double? = nil) -> Path {
         let c = v.point(item.position)
-        if lamp.beam >= 300 {
+        let spread = spread ?? lamp.beam
+        if spread >= 300 {
             let r = LightMath.glowRadius(lamp, output: item.output) * v.scale
             return Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
         }
         let len = LightMath.beamLength(lamp, output: item.output) * v.scale
-        let half = min(lamp.beam, 170) / 2
+        let half = min(spread, 170) / 2
         var p = Path()
         p.move(to: c)
         p.addArc(center: c, radius: len, startAngle: .degrees(item.angle - half), endAngle: .degrees(item.angle + half), clockwise: false)

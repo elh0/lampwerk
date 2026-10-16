@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The top-down plan. Drag a lamp to move it, drag the handle to aim it, tap to select, pinch to zoom.
+/// The top-down plan. Drag a lamp, the talent or the camera to move it, drag the handle to aim it, tap to select, pinch to zoom.
 struct PlanCanvas: View {
     @Binding var plot: Plot
     @Binding var selected: PlacedLamp.ID?
@@ -9,7 +9,7 @@ struct PlanCanvas: View {
     @State private var drag: DragState?
     @GestureState private var pinch: CGFloat = 1
 
-    private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, none }
+    private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, none }
 
     private struct DragState {
         var target: Target
@@ -34,7 +34,7 @@ struct PlanCanvas: View {
                     .updating($pinch) { value, state, _ in state = value.magnification }
                     .onEnded { value in zoom = min(4, max(0.6, zoom * value.magnification)) }
             )
-            .accessibilityLabel("Lighting plan. Drag lamps to move, drag the handle to aim, pinch to zoom.")
+            .accessibilityLabel("Lighting plan. Drag lamps, the talent or the camera to move, drag the handle to aim, pinch to zoom.")
         }
     }
 
@@ -68,13 +68,16 @@ struct PlanCanvas: View {
         if let item = plot.items.first(where: { $0.id == selected }), handle(item).distance(to: p) < reach * 0.8 {
             return .aim(item.id)
         }
-        let nearest = plot.items
-            .map { ($0.id, $0.position.distance(to: p)) }
-            .filter { $0.1 < reach }
-            .min { $0.1 < $1.1 }
-        if let nearest { return .lamp(nearest.0) }
-        if plot.talent.distance(to: p) < reach { return .talent }
-        return .none
+        // Whatever is nearest the finger, so a lamp tagged close to the talent or camera doesn't hide them.
+        var candidates: [(Target, Double)] = plot.items.map { (.lamp($0.id), $0.position.distance(to: p)) }
+        candidates.append((.talent, plot.talent.distance(to: p)))
+        candidates.append((.camera, plot.camera.distance(to: p)))
+        let nearest = candidates.filter { $0.1 < reach }.min { $0.1 < $1.1 }
+        return nearest?.0 ?? .none
+    }
+
+    private func inRoom(_ p: Point2) -> Point2 {
+        Point2(x: min(plot.roomWidth - 0.3, max(0.3, p.x)), y: min(plot.roomDepth - 0.3, max(0.3, p.y)))
     }
 
     private func dragGesture(_ v: PlanViewport) -> some Gesture {
@@ -92,6 +95,8 @@ struct PlanCanvas: View {
                         }
                     case .talent:
                         offset = Point2(x: plot.talent.x - start.x, y: plot.talent.y - start.y)
+                    case .camera:
+                        offset = Point2(x: plot.camera.x - start.x, y: plot.camera.y - start.y)
                     default: break
                     }
                     drag = DragState(target: target, offset: offset)
@@ -111,10 +116,9 @@ struct PlanCanvas: View {
                     guard let i = plot.items.firstIndex(where: { $0.id == id }) else { return }
                     plot.items[i].angle = plot.items[i].position.bearing(to: p)
                 case .talent:
-                    plot.talent = Point2(
-                        x: min(plot.roomWidth - 0.3, max(0.3, p.x + d.offset.x)),
-                        y: min(plot.roomDepth - 0.3, max(0.3, p.y + d.offset.y))
-                    )
+                    plot.talent = inRoom(Point2(x: p.x + d.offset.x, y: p.y + d.offset.y))
+                case .camera:
+                    plot.camera = inRoom(Point2(x: p.x + d.offset.x, y: p.y + d.offset.y))
                 case .none:
                     break
                 }

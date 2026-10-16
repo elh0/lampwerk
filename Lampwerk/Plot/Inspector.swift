@@ -29,9 +29,11 @@ struct Inspector: View {
 
                     VStack(spacing: 0) {
                         if lamp.isLight {
-                            row("At talent", plot.isOn(item) ? "\(Int(LightMath.lux(from: item, at: plot.talent)).formatted()) lx" : "Off")
+                            row("At talent", plot.isOn(item) ? "\(Int(LightMath.lux(from: item, at: plot.talent, in: plot)).formatted()) lx" : "Off")
                             row("Draw", String(format: "%.1f A", LightMath.amps(item, supply: supply)))
                             cycleRow("Modifier", item.modifier, lamp.modifiers) { plot.items[index].modifier = $0 }
+                            row("Spread", spreadText(lamp))
+                            if lamp.isLight, LightMath.spread(item) < 300 { diffRow }
                             cycleRow("Gel", item.gel, Gels.all) { plot.items[index].gel = $0 }
                         }
                         row("Distance", String(format: "%.1f m", item.position.distance(to: plot.talent)), last: true)
@@ -80,6 +82,43 @@ struct Inspector: View {
         guard lamp.isLight else { return lamp.group.rawValue }
         let beam = lamp.beam >= 300 ? "360°" : "\(Int(lamp.beam))°"
         return "\(Int(lamp.watts).formatted()) W · \(beam) · approx"
+    }
+
+    private func spreadText(_ lamp: Lamp) -> String {
+        let s = LightMath.spread(item, in: plot)
+        let text = s >= 300 ? "All round" : "\(Int(s))°"
+        return s == lamp.beam ? text : text + " (from \(lamp.beam >= 300 ? "all round" : "\(Int(lamp.beam))°"))"
+    }
+
+    /// One tap puts a 4x4 of 216 in front of the head, square to its beam. Tap again to take it away.
+    private var diffRow: some View {
+        let frame = LightMath.diffFrame(for: item, in: plot)
+        return HStack {
+            Text("Diff").font(.lwBody).foregroundStyle(Palette.quiet)
+            Spacer()
+            Button {
+                if let frame { plot.items.removeAll { $0.id == frame.id } } else { addDiff() }
+            } label: {
+                Text(frame.map { $0.lamp?.name ?? "Diff" } ?? "Add 216 in front")
+                    .font(.lwValue).foregroundStyle(Palette.text)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(Palette.ruleStrong).frame(height: 1).offset(y: 2)
+                    }
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(minHeight: 30)
+        .overlay(alignment: .bottom) { Divider().overlay(Palette.rule) }
+    }
+
+    private func addDiff() {
+        let reach = min(0.9, max(0.5, item.position.distance(to: plot.talent) * 0.4))
+        let a = item.angle * .pi / 180
+        let frame = PlacedLamp(
+            lampID: "f4d", x: item.x + reach * cos(a), y: item.y + reach * sin(a),
+            angle: item.angle + 90, role: .diff, cct: 0, modifier: "None", height: item.height
+        )
+        plot.items.insert(frame, at: index + 1)
     }
 
     private func row(_ label: String, _ value: String, last: Bool = false) -> some View {

@@ -14,16 +14,46 @@ enum LightMath {
     static let warnShare = 0.8
 
     /// Lux from one lamp at a point:
-    /// watts × efficacy × output × modifier × gel ÷ (max(0.4, beam ÷ 60) × distance²) × 0.9.
-    /// Outside the beam counts 12%.
-    static func lux(from item: PlacedLamp, at p: Point2) -> Double {
+    /// watts × efficacy × output × modifier × gel × diff ÷ (max(0.4, beam ÷ 60) × distance²) × 0.9.
+    /// The beam is the one with the modifier and any diff frame in front. Outside the beam counts 12%.
+    static func lux(from item: PlacedLamp, at p: Point2, in plot: Plot? = nil) -> Double {
         guard let lamp = item.lamp, lamp.isLight else { return 0 }
+        let beam = spread(item, in: plot)
         let d = max(0.5, item.position.distance(to: p))
-        let inBeam = lamp.beam >= 300 || angleBetween(item.position.bearing(to: p), item.angle) <= lamp.beam / 2 ? 1.0 : 0.12
+        let inBeam = beam >= 300 || angleBetween(item.position.bearing(to: p), item.angle) <= beam / 2 ? 1.0 : 0.12
+        let frame = plot.flatMap { diffFrame(for: item, in: $0) }
         let lumens = lamp.watts * lamp.efficacy * (item.output / 100)
             * (Modifiers.loss[item.modifier] ?? 1) * (Gels.loss[item.gel] ?? 1)
-        let spread = max(0.4, lamp.beam / 60)
-        return (lumens * inBeam / (spread * d * d) * 0.9).rounded()
+            * (frame.map { diffLoss($0) } ?? 1)
+        let spreadFactor = max(0.4, beam / 60)
+        return (lumens * inBeam / (spreadFactor * d * d) * 0.9).rounded()
+    }
+
+    /// The beam angle as it leaves the head: the modifier's if it has one, opened up by a diff frame in front.
+    static func spread(_ item: PlacedLamp, in plot: Plot? = nil) -> Double {
+        guard let lamp = item.lamp else { return 0 }
+        var beam = Modifiers.beam[item.modifier] ?? lamp.beam
+        if beam < 300, let plot, diffFrame(for: item, in: plot) != nil { beam = max(beam, 150) }
+        return beam
+    }
+
+    /// A diff frame standing in this head's beam, close enough to soften it.
+    static func diffFrame(for item: PlacedLamp, in plot: Plot) -> PlacedLamp? {
+        guard let lamp = item.lamp, lamp.isLight else { return nil }
+        let own = Modifiers.beam[item.modifier] ?? lamp.beam
+        guard own < 300 else { return nil }
+        return plot.items
+            .filter { $0.lamp?.kind == .diff }
+            .filter { f in
+                let d = item.position.distance(to: f.position)
+                return d > 0.15 && d < 2.2 && angleBetween(item.position.bearing(to: f.position), item.angle) <= max(20, own / 2)
+            }
+            .min { item.position.distance(to: $0.position) < item.position.distance(to: $1.position) }
+    }
+
+    /// Rough transmission of a diff frame: 216 about half, grid cloth about a third.
+    static func diffLoss(_ frame: PlacedLamp) -> Double {
+        frame.lamp?.name.contains("grid cloth") == true ? 0.35 : 0.5
     }
 
     /// Lux at a point from every lamp in a role that's on in the current setup.
@@ -33,9 +63,9 @@ enum LightMath {
         for item in plot.items where item.role == role {
             guard let lamp = item.lamp else { continue }
             if lamp.isLight {
-                if plot.isOn(item) { total += lux(from: item, at: p) }
+                if plot.isOn(item) { total += lux(from: item, at: p, in: plot) }
             } else if lamp.kind == .bounce {
-                let key = plot.items.filter { plot.isOn($0) && $0.role == .key }.reduce(0) { $0 + lux(from: $1, at: p) }
+                let key = plot.items.filter { plot.isOn($0) && $0.role == .key }.reduce(0) { $0 + lux(from: $1, at: p, in: plot) }
                 let falloff = max(1, pow(item.position.distance(to: p), 2) / 2)
                 total += key * 0.45 * min(1, lamp.width / 1.2) / falloff
             }

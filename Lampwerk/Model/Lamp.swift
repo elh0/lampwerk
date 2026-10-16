@@ -78,6 +78,12 @@ enum Modifiers {
         "Snapgrid 40°": 0.8, "Softbox": 0.45, "Dome M": 0.45, "Lantern": 0.35, "Fresnel lens": 1.3,
         "Snoot": 0.9, "Chimera, medium": 0.4, "8x8 full grid": 0.3, "Honeycrate": 0.85, "Shade": 0.6,
     ]
+
+    /// Beam angle with the modifier on, in degrees. 300 and over glows all round. Missing means the head's own beam.
+    static let beam: [String: Double] = [
+        "Snapgrid 40°": 40, "Softbox": 130, "Dome M": 140, "Lantern": 300, "Fresnel lens": 30,
+        "Snoot": 15, "Chimera, medium": 120, "8x8 full grid": 150, "Honeycrate": 70, "Shade": 300,
+    ]
 }
 
 enum LampLibrary {
@@ -108,6 +114,7 @@ enum LampLibrary {
         Lamp(id: "lamp", name: "Table lamp", brand: "practical", group: .practicals, kind: .practical, watts: 60, beam: 300, cct: 2700...2700, efficacy: 15, width: 0.3, depth: 0.3),
         Lamp(id: "china", name: "China ball", brand: "practical", group: .practicals, kind: .practical, watts: 150, beam: 300, cct: 2700...5600, efficacy: 40, width: 0.5, depth: 0.5),
         Lamp(id: "f4", name: "4x4 frame, ultra bounce", brand: "grip", group: .grip, kind: .bounce, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.2, depth: 0.06),
+        Lamp(id: "f4d", name: "4x4 frame, 216 diff", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.2, depth: 0.06),
         Lamp(id: "f6", name: "6x6 frame, 216 diff", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.8, depth: 0.06),
         Lamp(id: "f12", name: "12x12 frame, grid cloth", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 3.6, depth: 0.08),
         Lamp(id: "flag", name: "Flag 24x36", brand: "grip", group: .grip, kind: .flag, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 0.9, depth: 0.06),
