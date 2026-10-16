@@ -37,7 +37,7 @@ enum Export {
         var lines = ["\(plot.name) · \(plot.items.count) lamps"]
         for (n, item) in plot.items.enumerated() {
             guard let lamp = item.lamp else { continue }
-            var parts = [String(format: "%02d", n + 1), item.role.title, lamp.fullName]
+            var parts = [String(format: "%02d", n + 1), item.title, lamp.fullName]
             if item.modifier != "None" { parts.append(item.modifier.lowercased()) }
             if item.gel != "None" { parts.append(item.gel) }
             if let h = item.height { parts.append(String(format: "head %.1f m", h)) }
@@ -138,14 +138,14 @@ struct GafferSheet: View {
 
     private var table: some View {
         VStack(spacing: 0) {
-            row("#", "Head", "Role", "High", "To talent", "A", header: true)
+            row("#", "Head", "Name", "High", "To talent", "A", header: true)
             ForEach(Array(plot.items.enumerated()), id: \.element.id) { n, item in
                 let lamp = item.lamp
                 let mod = item.modifier == "None" ? "" : ", " + item.modifier.lowercased()
                 row(
                     String(format: "%02d", n + 1),
                     (lamp?.fullName ?? "?") + mod,
-                    item.role.title,
+                    item.title,
                     item.height.map { String(format: "%.1f", $0) } ?? "–",
                     String(format: "%.1f", item.position.distance(to: plot.talent)),
                     (lamp?.isLight ?? false) ? String(format: "%.1f", LightMath.amps(item, supply: supply)) : "–"
@@ -169,7 +169,7 @@ struct GafferSheet: View {
         HStack(spacing: 8) {
             Text(a).frame(width: 22, alignment: .leading)
             Text(b).frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
-            Text(c).frame(width: 60, alignment: .leading)
+            Text(c).frame(width: 84, alignment: .leading).lineLimit(1)
             Text(d).frame(width: 36, alignment: .trailing)
             Text(e).frame(width: 56, alignment: .trailing)
             Text(f).frame(width: 34, alignment: .trailing)

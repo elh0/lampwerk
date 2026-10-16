@@ -15,6 +15,8 @@ struct EditorView: View {
     @State private var showingSend = false
     /// Set when AR tagging finishes, so the send sheet follows straight after.
     @State private var sendAfterAR = false
+    /// The name being typed in the rename box; nil when it's closed.
+    @State private var renaming: String?
 
     var body: some View {
         Group {
@@ -56,6 +58,15 @@ struct EditorView: View {
             .presentationDetents([.medium, .large])
             .presentationBackground(Palette.p1)
         }
+        .alert("Rename plot", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Scene or place", text: Binding(get: { renaming ?? "" }, set: { renaming = $0 }))
+            Button("Save") {
+                let name = (renaming ?? "").trimmingCharacters(in: .whitespaces)
+                if !name.isEmpty { plot.wrappedValue.name = name }
+                renaming = nil
+            }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
         .confirmationDialog("Tag this plot in AR?", isPresented: $confirmingAR, titleVisibility: .visible) {
             Button("Tag in AR") { showingAR = true }
             Button("Cancel", role: .cancel) {}
@@ -80,7 +91,7 @@ struct EditorView: View {
         }
         .sheet(isPresented: $showingSend) {
             SendSheet(
-                plot: plot.wrappedValue,
+                plot: plot,
                 supply: store.supply,
                 backToPlan: { showingSend = false },
                 allPlots: {
@@ -96,12 +107,19 @@ struct EditorView: View {
     private func topBar(_ plot: Plot) -> some View {
         HStack(spacing: 12) {
             Button("Plots", action: close).buttonStyle(ActionButtonStyle())
-            VStack(spacing: 1) {
-                Text(plot.name).font(.lwTitle).foregroundStyle(Palette.text).lineLimit(1)
+            Button { renaming = plot.name } label: {
+                VStack(spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text(plot.name).font(.lwTitle).foregroundStyle(Palette.text).lineLimit(1)
+                        Image(systemName: "pencil").font(.system(size: 11)).foregroundStyle(Palette.quiet)
+                    }
                 Text(String(format: "%.1f × %.1f m", plot.roomWidth, plot.roomDepth))
                     .font(.lwData).foregroundStyle(Palette.quiet)
+                }
             }
+            .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
+            .accessibilityLabel("Rename \(plot.name)")
             HStack(spacing: 6) {
                 Button("AR") {
                     if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }

@@ -97,7 +97,7 @@ enum PlanDrawing {
                 let reach = max(item.lamp?.width ?? 0.3, item.lamp?.depth ?? 0.3) / 2 + 0.35
                 let a = (item.angle + 180) * .pi / 180
                 let p = v.point(x: item.x + reach * cos(a), y: item.y + reach * sin(a))
-                label(String(format: "%02d", n + 1) + " " + item.role.title.uppercased(), at: p, ctx, color: ink.quiet)
+                label(String(format: "%02d", n + 1) + " " + item.title.uppercased(), at: p, ctx, color: ink.quiet)
             }
         }
     }

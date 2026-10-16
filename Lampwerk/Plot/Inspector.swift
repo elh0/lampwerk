@@ -22,6 +22,11 @@ struct Inspector: View {
                         Button("Close") { selected = nil }.buttonStyle(ActionButtonStyle())
                     }
 
+                    NameField(placeholder: item.role.title, text: Binding(
+                        get: { plot.items[index].name ?? "" },
+                        set: { plot.items[index].name = $0.isEmpty ? nil : $0 }
+                    ))
+
                     VStack(spacing: 0) {
                         if lamp.isLight {
                             row("At talent", plot.isOn(item) ? "\(Int(LightMath.lux(from: item, at: plot.talent)).formatted()) lx" : "Off")

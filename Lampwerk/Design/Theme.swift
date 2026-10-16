@@ -83,6 +83,27 @@ struct Chip: View {
     }
 }
 
+/// A one-line name you can always tap and change, with a pencil so it reads as editable.
+struct NameField: View {
+    var placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField(placeholder, text: $text)
+                .font(.lwBody)
+                .foregroundStyle(Palette.text)
+                .submitLabel(.done)
+                .autocorrectionDisabled()
+            Image(systemName: "pencil").font(.system(size: 13)).foregroundStyle(Palette.quiet)
+        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: 38)
+        .background(Palette.p0, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Palette.rule))
+    }
+}
+
 /// Buttons: primary is off-white on dark, the rest are raised panels.
 struct ActionButtonStyle: ButtonStyle {
     var primary = false

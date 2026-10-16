@@ -38,6 +38,14 @@ struct PlacedLamp: Identifiable, Codable, Hashable, Sendable {
     var offIn: Set<Shot> = []
     /// Head height in metres, when it was tagged in AR. Nil for lamps placed on the plan.
     var height: Double? = nil
+    /// Your own name for it, e.g. "Window key". Falls back to the role.
+    var name: String? = nil
+
+    /// What the plan, the sheet and the lists call this lamp.
+    var title: String {
+        let n = name?.trimmingCharacters(in: .whitespaces) ?? ""
+        return n.isEmpty ? role.title : n
+    }
 
     var position: Point2 {
         get { Point2(x: x, y: y) }

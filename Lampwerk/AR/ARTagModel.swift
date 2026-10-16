@@ -15,6 +15,7 @@ final class ARTagModel {
         var role: Role
         var floor: SIMD2<Float>
         var height: Float
+        var name = ""
 
         var lamp: Lamp? { LampLibrary.lamp(lampID) }
     }
@@ -160,7 +161,8 @@ final class ARTagModel {
                 role: tag.role,
                 cct: lamp.cct?.lowerBound ?? 5600,
                 modifier: lamp.modifiers[0],
-                height: Double(tag.height)
+                height: Double(tag.height),
+                name: tag.name.isEmpty ? nil : tag.name
             )
         }
         return plot

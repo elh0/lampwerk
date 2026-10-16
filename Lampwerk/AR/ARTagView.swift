@@ -77,7 +77,7 @@ struct ARTagView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Text("\(n + 1)").font(.lwData)
-                            Text(tag.role.title).font(.lwChip)
+                            Text(tag.name.isEmpty ? tag.role.title : tag.name).font(.lwChip)
                         }
                         .foregroundStyle(model.selected == tag.id ? Palette.p0 : Palette.text)
                         .padding(.horizontal, 8).frame(minHeight: 26)
@@ -166,6 +166,10 @@ struct ARTagView: View {
                     Text(String(format: "%.1f m to talent", d)).font(.lwData).foregroundStyle(Palette.quiet)
                 }
             }
+            NameField(placeholder: tag.role.title, text: Binding(
+                get: { model.tags[i].name },
+                set: { model.tags[i].name = $0 }
+            ))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     ForEach(Role.allCases, id: \.self) { role in
