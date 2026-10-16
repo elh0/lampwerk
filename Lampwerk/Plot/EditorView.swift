@@ -10,6 +10,8 @@ struct EditorView: View {
     @State private var selected: PlacedLamp.ID?
     @State private var showingLibrary = false
     @State private var zoom: CGFloat = 1
+    @State private var showingAR = false
+    @State private var confirmingAR = false
 
     var body: some View {
         Group {
@@ -51,6 +53,22 @@ struct EditorView: View {
             .presentationDetents([.medium, .large])
             .presentationBackground(Palette.p1)
         }
+        .confirmationDialog("Tag this plot in AR?", isPresented: $confirmingAR, titleVisibility: .visible) {
+            Button("Tag in AR") { showingAR = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your tags replace the lamps on this plan.")
+        }
+        .fullScreenCover(isPresented: $showingAR) {
+            ARTagView(base: plot.wrappedValue) { tagged in
+                if let tagged {
+                    selected = nil
+                    zoom = 1
+                    plot.wrappedValue = tagged
+                }
+                showingAR = false
+            }
+        }
     }
 
     private func topBar(_ plot: Plot) -> some View {
@@ -62,8 +80,11 @@ struct EditorView: View {
                     .font(.lwData).foregroundStyle(Palette.quiet)
             }
             .frame(maxWidth: .infinity)
-            // Keeps the title centred until the gaffer sheet button arrives.
-            Button("Plots") {}.buttonStyle(ActionButtonStyle()).hidden()
+            Button("AR") {
+                if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }
+            }
+            .buttonStyle(ActionButtonStyle())
+            .frame(minWidth: 54, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .frame(minHeight: 56)

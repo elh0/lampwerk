@@ -6,7 +6,7 @@ Lighting plots for iPhone. Place the heads you rent, read the light and the amps
 
 1. Open `Lampwerk.xcodeproj` in Xcode 16 or later.
 2. Pick the **Lampwerk** target, then **Signing & Capabilities**, and choose your team.
-3. Run on an iPhone or the simulator. Everything works in the simulator; there's no camera or sensor work yet.
+3. Run on an iPhone or the simulator. Everything but AR tagging works in the simulator. AR needs a real iPhone (LiDAR phones also show the scanned room mesh).
 
 If the project file ever won't open, regenerate it: `brew install xcodegen && xcodegen`.
 
@@ -19,6 +19,7 @@ If the project file ever won't open, regenerate it: `brew install xcodegen && xc
 | The plan: draw, drag, aim, pinch | `Plot/PlanCanvas.swift`, `Plot/PlanDrawing.swift` |
 | Inspector (role, output, colour, modifier, gel, switch, duplicate, mirror) | `Plot/Inspector.swift` |
 | Lamp library sheet | `Plot/LibrarySheet.swift` |
+| AR tagging: talent mark, camera, then lamps on the floor; Done lays them out as the plan | `AR/ARTagView.swift`, `AR/ARTagModel.swift`, `AR/ARContainer.swift` |
 
 Under the hood:
 

@@ -36,6 +36,8 @@ struct PlacedLamp: Identifiable, Codable, Hashable, Sendable {
     var gel = "None"
     /// Setups this lamp is switched off in.
     var offIn: Set<Shot> = []
+    /// Head height in metres, when it was tagged in AR. Nil for lamps placed on the plan.
+    var height: Double? = nil
 
     var position: Point2 {
         get { Point2(x: x, y: y) }
