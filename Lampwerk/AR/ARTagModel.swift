@@ -7,7 +7,7 @@ import simd
 @MainActor
 @Observable
 final class ARTagModel {
-    enum Step { case talent, camera, lamps }
+    enum Step { case refA, refB, talent, camera, lamps }
 
     struct Tag: Identifiable, Equatable {
         let id = UUID()
@@ -31,6 +31,22 @@ final class ARTagModel {
     var selected: Tag.ID?
     var choice = "a600"
 
+    /// Two spots picked on the floor plan (plot metres) and the same spots tagged in AR (world x, z).
+    /// With both, Done lays the tags onto the plan instead of drawing a new room.
+    var planA: Point2?
+    var planB: Point2?
+    var refA: SIMD2<Float>?
+    var refB: SIMD2<Float>?
+    var aligned: Bool { planA != nil && planB != nil && refA != nil && refB != nil }
+
+    /// Starts by tagging the two plan spots.
+    func lineUp(_ a: Point2, _ b: Point2) {
+        planA = a
+        planB = b
+        step = .refA
+        revision += 1
+    }
+
     /// Where the centre of the screen meets the floor, if it does.
     var reticle: SIMD2<Float>?
     var trackingReady = false
@@ -43,6 +59,8 @@ final class ARTagModel {
         if !trackingReady { return "Move the phone slowly to find the floor" }
         if reticle == nil { return "Point at the floor" }
         switch step {
+        case .refA: return "Point at spot A from the plan, tap +"
+        case .refB: return "Now spot B, tap +"
         case .talent: return "Point at where talent stands, tap +"
         case .camera: return "Now the camera position, tap +"
         case .lamps:
@@ -62,6 +80,12 @@ final class ARTagModel {
     func tag() {
         guard let r = reticle else { return }
         switch step {
+        case .refA:
+            refA = r
+            step = .refB
+        case .refB:
+            refB = r
+            step = .talent
         case .talent:
             talent = r
             step = .camera
@@ -88,7 +112,15 @@ final class ARTagModel {
         case .camera:
             talent = nil
             step = .talent
+        case .talent where planA != nil:
+            refB = nil
+            step = .refB
         case .talent:
+            break
+        case .refB:
+            refA = nil
+            step = .refA
+        case .refA:
             break
         }
         revision += 1
@@ -126,6 +158,7 @@ final class ARTagModel {
     /// Lays the tags out as a plot. Everything is kept relative to the talent and the camera,
     /// with the camera at the bottom looking up the plan, so the same plot can be laid out on another set later.
     func plot(from base: Plot) -> Plot? {
+        if aligned { return alignedPlot(from: base) }
         guard let t = talent, let c = camera else { return nil }
         var u = c - t
         let len = simd_length(u)
@@ -154,6 +187,50 @@ final class ARTagModel {
             guard let lamp = tag.lamp else { return nil }
             let l = local(tag.floor)
             let pos = Point2(x: l.x + offX, y: l.y + offY)
+            let aim = pos.bearing(to: plot.talent)
+            return PlacedLamp(
+                lampID: lamp.id, x: pos.x, y: pos.y,
+                angle: lamp.isGrip ? aim + 90 : aim,
+                role: tag.role,
+                cct: lamp.cct?.lowerBound ?? 5600,
+                modifier: lamp.modifiers[0],
+                height: Double(tag.height),
+                name: tag.name.isEmpty ? nil : tag.name
+            )
+        }
+        return plot
+    }
+
+    /// Lays the tags onto the existing plan using the two shared spots: turn and slide the AR
+    /// world so A and B land on the plan's A and B. If the plan's scale disagrees with the
+    /// measured distance, the room (and the plan stretched over it) is resized to match.
+    private func alignedPlot(from base: Plot) -> Plot? {
+        guard let t = talent, let c = camera, let pa = planA, let pb = planB, let wa = refA, let wb = refB else { return nil }
+        let worldDist = Double(simd_distance(wa, wb))
+        let planDist = pa.distance(to: pb)
+        guard worldDist > 0.2, planDist > 0.05 else { return nil }
+
+        var plot = base
+        var k = worldDist / planDist
+        if k < 0.33 || k > 3 { k = 1 }   // Way off means a mis-tap, not a wrong scale.
+        plot.roomWidth *= k
+        plot.roomDepth *= k
+        let a = Point2(x: pa.x * k, y: pa.y * k), b = Point2(x: pb.x * k, y: pb.y * k)
+
+        // Seen from above, world (x, z) and plan (x, y) turn the same way, so a rotation is enough.
+        let angleW = atan2(Double(wb.y - wa.y), Double(wb.x - wa.x))
+        let angleP = atan2(b.y - a.y, b.x - a.x)
+        let r = angleP - angleW, cr = cos(r), sr = sin(r)
+        func map(_ w: SIMD2<Float>) -> Point2 {
+            let dx = Double(w.x - wa.x), dy = Double(w.y - wa.y)
+            return Point2(x: a.x + dx * cr - dy * sr, y: a.y + dx * sr + dy * cr)
+        }
+
+        plot.talent = map(t)
+        plot.camera = map(c)
+        plot.items = tags.compactMap { tag in
+            guard let lamp = tag.lamp else { return nil }
+            let pos = map(tag.floor)
             let aim = pos.bearing(to: plot.talent)
             return PlacedLamp(
                 lampID: lamp.id, x: pos.x, y: pos.y,

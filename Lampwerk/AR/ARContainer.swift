@@ -101,10 +101,10 @@ struct ARContainer: UIViewRepresentable {
                 let p = hit.worldTransform.columns.3
                 let floor = SIMD2<Float>(p.x, p.z)
                 if model.reticle.map({ simd_distance($0, floor) > 0.005 }) ?? true { model.reticle = floor }
-                if model.talent == nil, abs(model.floorY - p.y) > 0.005 { model.floorY = p.y }
+                if model.refA == nil, model.talent == nil, abs(model.floorY - p.y) > 0.005 { model.floorY = p.y }
                 if !model.trackingReady { model.trackingReady = true }
                 reticle.isEnabled = true
-                reticle.position = SIMD3(p.x, (model.talent == nil ? p.y : model.floorY) + 0.003, p.z)
+                reticle.position = SIMD3(p.x, (model.refA == nil && model.talent == nil ? p.y : model.floorY) + 0.003, p.z)
             } else {
                 if model.reticle != nil { model.reticle = nil }
                 reticle.isEnabled = false
@@ -125,6 +125,8 @@ struct ARContainer: UIViewRepresentable {
             }
             let y = model.floorY
             var s: [String: CGPoint] = [:]
+            if let a = model.refA, let p = screen([a.x, y + 0.25, a.y]) { s["refA"] = p }
+            if let b = model.refB, let p = screen([b.x, y + 0.25, b.y]) { s["refB"] = p }
             if let t = model.talent, let p = screen([t.x, y + 1.95, t.y]) { s["talent"] = p }
             if let c = model.camera, let p = screen([c.x, y + 1.7, c.y]) { s["camera"] = p }
             for tag in model.tags {
@@ -142,6 +144,12 @@ struct ARContainer: UIViewRepresentable {
             builtSelection = model.selected
             for child in Array(markers.children) { child.removeFromParent() }
             let y = model.floorY
+
+            for ref in [model.refA, model.refB].compactMap({ $0 }) {
+                let at = SIMD3<Float>(ref.x, y, ref.y)
+                markers.addChild(disc(0.3, .white, 0.5, at: at))
+                markers.addChild(box([0.01, 0.2, 0.01], .white, 0.8, at: at + [0, 0.1, 0]))
+            }
 
             if let t = model.talent {
                 let at = SIMD3<Float>(t.x, y, t.y)

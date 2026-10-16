@@ -8,8 +8,28 @@ struct ARTagView: View {
     var finish: (Plot?) -> Void
 
     @State private var model = ARTagModel()
+    /// A plot with a floor plan starts by picking two spots on it to line AR up with.
+    @State private var liningUp: Bool
+
+    init(base: Plot, finish: @escaping (Plot?) -> Void) {
+        self.base = base
+        self.finish = finish
+        _liningUp = State(initialValue: base.floorPlan != nil)
+    }
 
     var body: some View {
+        if liningUp {
+            LineUpView(plot: base, start: { a, b in
+                model.lineUp(a, b)
+                liningUp = false
+            }, skip: { liningUp = false }, cancel: { finish(nil) })
+            .preferredColorScheme(.dark)
+        } else {
+            tagging
+        }
+    }
+
+    private var tagging: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             ARContainer(model: model).ignoresSafeArea()
@@ -48,6 +68,8 @@ struct ARTagView: View {
 
     private var stepTitle: String {
         switch model.step {
+        case .refA: "Line up · spot A"
+        case .refB: "Line up · spot B"
         case .talent: "1 of 3 · talent mark"
         case .camera: "2 of 3 · camera"
         case .lamps: "3 of 3 · lamps (\(model.tags.count))"
@@ -68,6 +90,8 @@ struct ARTagView: View {
 
     private var labels: some View {
         ZStack {
+            if let p = model.screen["refA"] { tagLabel("A", at: p) }
+            if let p = model.screen["refB"] { tagLabel("B", at: p) }
             if let p = model.screen["talent"] { tagLabel("Talent", at: p) }
             if let p = model.screen["camera"] { tagLabel("Camera", at: p) }
             ForEach(Array(model.tags.enumerated()), id: \.element.id) { n, tag in
