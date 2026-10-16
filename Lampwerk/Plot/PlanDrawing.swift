@@ -54,6 +54,15 @@ enum PlanDrawing {
         let line = ink.line
         let stroke = StrokeStyle(lineWidth: o.lineWidth)
 
+        // The location's floor plan, faint, stretched to the room. Inverted on the dark screen.
+        if let img = FloorPlans.image(plot.floorPlan) {
+            var g = ctx
+            g.opacity = o.paper ? 0.45 : 0.32
+            if !o.paper { g.addFilter(.colorInvert()) }
+            let rect = CGRect(origin: v.point(x: 0, y: 0), size: CGSize(width: plot.roomWidth * v.scale, height: plot.roomDepth * v.scale))
+            g.draw(Image(uiImage: img), in: rect)
+        }
+
         if o.showGrid {
             var grid = Path()
             for x in stride(from: 1.0, to: plot.roomWidth, by: 1) {

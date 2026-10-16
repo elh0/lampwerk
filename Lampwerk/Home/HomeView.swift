@@ -50,8 +50,8 @@ struct HomeView: View {
         }
         .background(Palette.p0)
         .sheet(isPresented: $showingNew) {
-            NewPlotSheet { name, starter in
-                let plot = store.create(name: name, starter: starter)
+            NewPlotSheet { name, starter, width, depth in
+                let plot = store.create(name: name, starter: starter, width: width, depth: depth)
                 showingNew = false
                 open(plot.id)
             }
@@ -87,9 +87,11 @@ struct PlotRow: View {
 
 /// Name the scene, pick a starting setup. No account.
 struct NewPlotSheet: View {
-    var create: (String, Starter) -> Void
+    var create: (String, Starter, Double, Double) -> Void
     @State private var name = "Int. bedroom, day"
     @State private var starter: Starter = .threePoint
+    @State private var width = 6.0
+    @State private var depth = 8.4
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,6 +106,11 @@ struct NewPlotSheet: View {
                         .padding(.horizontal, 12).frame(height: 40)
                         .background(Palette.p0, in: RoundedRectangle(cornerRadius: Radius.card))
                         .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Palette.rule))
+                    Caps("Size of the space").padding(.top, 18)
+                    SizeRow(label: "Width", value: $width)
+                    SizeRow(label: "Depth", value: $depth)
+                    Text("You can add the location's floor plan once it's made: tap the size under the plot's name.")
+                        .font(.lwChip).foregroundStyle(Palette.quiet)
                     Caps("Start with").padding(.top, 18)
                     ForEach(Starter.allCases) { s in
                         Button { starter = s } label: {
@@ -129,7 +136,7 @@ struct NewPlotSheet: View {
             HStack {
                 Text("No account needed").font(.lwBody).foregroundStyle(Palette.quiet)
                 Spacer()
-                Button("Create") { create(name, starter) }.buttonStyle(ActionButtonStyle(primary: true))
+                Button("Create") { create(name, starter, width, depth) }.buttonStyle(ActionButtonStyle(primary: true))
             }
             .padding(.horizontal, 16).frame(minHeight: 56)
             .overlay(alignment: .top) { Divider().overlay(Palette.rule) }

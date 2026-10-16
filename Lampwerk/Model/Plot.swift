@@ -66,6 +66,8 @@ struct Plot: Identifiable, Codable, Hashable, Sendable {
     /// Room size in metres.
     var roomWidth = 6.0
     var roomDepth = 8.4
+    /// File name of the location's floor plan in Documents/floorplans, drawn under the plan.
+    var floorPlan: String? = nil
     var items: [PlacedLamp]
     var updated = Date()
 

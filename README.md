@@ -19,6 +19,7 @@ If the project file ever won't open, regenerate it: `brew install xcodegen && xc
 | The plan: draw, drag, aim, pinch | `Plot/PlanCanvas.swift`, `Plot/PlanDrawing.swift` |
 | Inspector (role, output, colour, modifier, gel, switch, duplicate, mirror) | `Plot/Inspector.swift` |
 | Lamp library sheet | `Plot/LibrarySheet.swift` |
+| Space: room size (also on New plot) and a location floor plan from Photos or Files (image or PDF), drawn faintly under the plan | `Space/SpaceSheet.swift`, `Space/FloorPlans.swift` |
 | Send sheet: gaffer sheet PDF, plan image, text list; opens after AR Done | `Send/SendSheet.swift`, `Send/Export.swift` |
 | AR tagging: talent mark, camera, then lamps on the floor; Done lays them out as the plan | `AR/ARTagView.swift`, `AR/ARTagModel.swift`, `AR/ARContainer.swift` |
 

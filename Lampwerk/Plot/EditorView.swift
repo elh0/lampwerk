@@ -19,6 +19,7 @@ struct EditorView: View {
     @State private var renaming: String?
     /// The lamps from the last Remove all, kept so it can be undone.
     @State private var cleared: [PlacedLamp]?
+    @State private var showingSpace = false
 
     var body: some View {
         Group {
@@ -114,6 +115,11 @@ struct EditorView: View {
                 showingAR = false
             }
         }
+        .sheet(isPresented: $showingSpace) {
+            SpaceSheet(plot: plot) { showingSpace = false }
+                .presentationDetents([.medium, .large])
+                .presentationBackground(Palette.p1)
+        }
         .sheet(isPresented: $showingSend) {
             SendSheet(
                 plot: plot,
@@ -132,19 +138,27 @@ struct EditorView: View {
     private func topBar(_ plot: Plot) -> some View {
         HStack(spacing: 12) {
             Button("Plots", action: close).buttonStyle(ActionButtonStyle())
-            Button { renaming = plot.name } label: {
-                VStack(spacing: 1) {
+            VStack(spacing: 1) {
+                Button { renaming = plot.name } label: {
                     HStack(spacing: 5) {
                         Text(plot.name).font(.lwTitle).foregroundStyle(Palette.text).lineLimit(1)
                         Image(systemName: "pencil").font(.system(size: 11)).foregroundStyle(Palette.quiet)
                     }
-                Text(String(format: "%.1f × %.1f m", plot.roomWidth, plot.roomDepth))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Rename \(plot.name)")
+                Button { showingSpace = true } label: {
+                    HStack(spacing: 4) {
+                        Text(String(format: "%.1f × %.1f m", plot.roomWidth, plot.roomDepth))
+                        if plot.floorPlan != nil { Text("· plan") }
+                        Image(systemName: "chevron.down").font(.system(size: 9))
+                    }
                     .font(.lwData).foregroundStyle(Palette.quiet)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Space size and floor plan")
             }
-            .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            .accessibilityLabel("Rename \(plot.name)")
             HStack(spacing: 6) {
                 Button("AR") {
                     if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }
