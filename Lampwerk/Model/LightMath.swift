@@ -33,7 +33,7 @@ enum LightMath {
     static func spread(_ item: PlacedLamp, in plot: Plot? = nil) -> Double {
         guard let lamp = item.lamp else { return 0 }
         var beam = Modifiers.beam[item.modifier] ?? lamp.beam
-        if beam < 300, let plot, diffFrame(for: item, in: plot) != nil { beam = max(beam, 150) }
+        if beam < 300, let plot, let frame = diffFrame(for: item, in: plot) { beam = max(beam, Diffusion.material(frame).spread) }
         return beam
     }
 
@@ -51,10 +51,8 @@ enum LightMath {
             .min { item.position.distance(to: $0.position) < item.position.distance(to: $1.position) }
     }
 
-    /// Rough transmission of a diff frame: 216 about half, grid cloth about a third.
-    static func diffLoss(_ frame: PlacedLamp) -> Double {
-        frame.lamp?.name.contains("grid cloth") == true ? 0.35 : 0.5
-    }
+    /// Rough transmission of a diff frame, from its material.
+    static func diffLoss(_ frame: PlacedLamp) -> Double { Diffusion.material(frame).pass }
 
     /// Lux at a point from every lamp in a role that's on in the current setup.
     /// A bounce in the role returns about 45% of the key, scaled by frame size and falling off with distance.

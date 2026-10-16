@@ -57,8 +57,57 @@ struct Lamp: Identifiable, Hashable, Sendable {
         case .fresnel: ["Barn doors", "Snoot", "Chimera, medium", "8x8 full grid"]
         case .tube: ["None", "Honeycrate"]
         case .practical: ["None", "Shade"]
+        case .diff: id == "f12" || id == "f20d" ? Diffusion.gridFirst : Diffusion.all
         default: ["None"]
         }
+    }
+}
+
+/// What goes in a diff frame. A frame keeps its material in `PlacedLamp.modifier`.
+enum Diffusion {
+    struct Material: Sendable {
+        let name: String
+        /// Rough transmission, for planning only.
+        let pass: Double
+        /// How wide the light leaves the frame, in degrees.
+        let spread: Double
+    }
+
+    /// Lightest to heaviest, roughly. Lee and Rosco numbers where gaffers use them.
+    static let materials: [Material] = [
+        Material(name: "Hampshire frost", pass: 0.85, spread: 90),
+        Material(name: "Opal", pass: 0.75, spread: 110),
+        Material(name: "251 quarter white", pass: 0.65, spread: 125),
+        Material(name: "China silk", pass: 0.6, spread: 135),
+        Material(name: "250 half white", pass: 0.5, spread: 145),
+        Material(name: "Light grid cloth", pass: 0.45, spread: 155),
+        Material(name: "216 full white", pass: 0.35, spread: 165),
+        Material(name: "Half grid cloth", pass: 0.35, spread: 165),
+        Material(name: "Magic cloth", pass: 0.3, spread: 170),
+        Material(name: "Full grid cloth", pass: 0.25, spread: 170),
+        Material(name: "Bleached muslin", pass: 0.2, spread: 175),
+        Material(name: "Unbleached muslin", pass: 0.15, spread: 175),
+    ]
+
+    static let byName = Dictionary(uniqueKeysWithValues: materials.map { ($0.name, $0) })
+    static let standard = "216 full white"
+    static let all = [standard] + materials.map(\.name).filter { $0 != standard }
+    static let gridFirst = ["Full grid cloth"] + materials.map(\.name).filter { $0 != "Full grid cloth" }
+
+    /// Frame sizes, smallest first.
+    static let frames = ["f4d", "f6", "f8d", "f12", "f20d"]
+
+    /// The frame's material; older plots stored "None", which meant the frame's own default.
+    static func material(_ frame: PlacedLamp) -> Material {
+        byName[frame.modifier] ?? byName[frame.lamp?.modifiers.first ?? standard] ?? byName[standard]!
+    }
+
+    /// Light lost, in stops, as a gaffer would say it: "1½ stops".
+    static func stops(_ m: Material) -> String {
+        let s = (log2(1 / m.pass) * 2).rounded() / 2
+        let whole = Int(s), half = s - Double(whole) >= 0.5
+        let text = whole == 0 ? (half ? "½" : "0") : "\(whole)" + (half ? "½" : "")
+        return text + (s == 1 ? " stop" : " stops")
     }
 }
 
@@ -114,9 +163,11 @@ enum LampLibrary {
         Lamp(id: "lamp", name: "Table lamp", brand: "practical", group: .practicals, kind: .practical, watts: 60, beam: 300, cct: 2700...2700, efficacy: 15, width: 0.3, depth: 0.3),
         Lamp(id: "china", name: "China ball", brand: "practical", group: .practicals, kind: .practical, watts: 150, beam: 300, cct: 2700...5600, efficacy: 40, width: 0.5, depth: 0.5),
         Lamp(id: "f4", name: "4x4 frame, ultra bounce", brand: "grip", group: .grip, kind: .bounce, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.2, depth: 0.06),
-        Lamp(id: "f4d", name: "4x4 frame, 216 diff", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.2, depth: 0.06),
-        Lamp(id: "f6", name: "6x6 frame, 216 diff", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.8, depth: 0.06),
-        Lamp(id: "f12", name: "12x12 frame, grid cloth", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 3.6, depth: 0.08),
+        Lamp(id: "f4d", name: "4x4 diff frame", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.2, depth: 0.06),
+        Lamp(id: "f6", name: "6x6 diff frame", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.8, depth: 0.06),
+        Lamp(id: "f8d", name: "8x8 diff frame", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 2.4, depth: 0.06),
+        Lamp(id: "f12", name: "12x12 diff frame", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 3.6, depth: 0.08),
+        Lamp(id: "f20d", name: "20x20 diff frame", brand: "grip", group: .grip, kind: .diff, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 6.1, depth: 0.1),
         Lamp(id: "flag", name: "Flag 24x36", brand: "grip", group: .grip, kind: .flag, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 0.9, depth: 0.06),
         Lamp(id: "floppy", name: "Floppy 4x4", brand: "grip", group: .grip, kind: .flag, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.2, depth: 0.06),
         Lamp(id: "poly", name: "Poly bounce 4x8", brand: "grip", group: .grip, kind: .bounce, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.2, depth: 0.08),
