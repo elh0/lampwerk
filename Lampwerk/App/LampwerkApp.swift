@@ -13,6 +13,7 @@ struct LampwerkApp: App {
             RootView()
                 .environment(store)
                 .preferredColorScheme(.dark)
+                .task { await FoundingTester.markIfBeta() }
         }
     }
 }

@@ -5,6 +5,8 @@ struct HomeView: View {
     @Environment(PlotStore.self) private var store
     var open: (Plot.ID) -> Void
     @State private var showingNew = false
+    @State private var beta = false
+    @AppStorage(FoundingTester.dismissedKey) private var cardDismissed = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +28,9 @@ struct HomeView: View {
 
             ScrollView {
                 LazyVStack(spacing: 8) {
+                    if beta && !cardDismissed {
+                        FoundingTesterCard { withAnimation { cardDismissed = true } }
+                    }
                     ForEach(store.plots) { plot in
                         Button { open(plot.id) } label: { PlotRow(plot: plot) }
                             .buttonStyle(.plain)
@@ -39,7 +44,13 @@ struct HomeView: View {
             }
 
             HStack {
-                Text("Saved on this phone").font(.lwBody).foregroundStyle(Palette.quiet)
+                if beta && cardDismissed {
+                    // The card folds away into the footer; tap to see it again.
+                    Button("Founding tester") { withAnimation { cardDismissed = false } }
+                        .font(.lwBody).foregroundStyle(Palette.quiet)
+                } else {
+                    Text("Saved on this phone").font(.lwBody).foregroundStyle(Palette.quiet)
+                }
                 Spacer()
                 Button("New plot") { showingNew = true }.buttonStyle(ActionButtonStyle(primary: true))
             }
@@ -49,6 +60,7 @@ struct HomeView: View {
             .overlay(alignment: .top) { Divider().overlay(Palette.rule) }
         }
         .background(Palette.p0)
+        .task { beta = await FoundingTester.isBetaBuild() }
         .sheet(isPresented: $showingNew) {
             NewPlotSheet { name, starter, width, depth in
                 let plot = store.create(name: name, starter: starter, width: width, depth: depth)
