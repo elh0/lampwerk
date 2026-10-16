@@ -121,6 +121,7 @@ struct SendSheet: View {
         }
         .padding(.vertical, 14)
         .contentShape(Rectangle())
-        .overlay(alignment: .bottom) { Divider().overlay(Palette.rule) }
+        // A drawn rule, not a Divider: inside a ShareLink's label a Divider turns vertical.
+        .overlay(alignment: .bottom) { Rectangle().fill(Palette.rule).frame(height: 1) }
     }
 }
