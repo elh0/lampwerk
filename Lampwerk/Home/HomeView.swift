@@ -6,6 +6,7 @@ struct HomeView: View {
     var open: (Plot.ID) -> Void
     @State private var showingNew = false
     @State private var beta = false
+    @State private var offerClaim = false
     @AppStorage(FoundingTester.dismissedKey) private var cardDismissed = false
 
     var body: some View {
@@ -28,7 +29,9 @@ struct HomeView: View {
 
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    if beta && !cardDismissed {
+                    if offerClaim {
+                        FoundingClaimCard()
+                    } else if beta && !cardDismissed {
                         FoundingTesterCard { withAnimation { cardDismissed = true } }
                     }
                     ForEach(store.plots) { plot in
@@ -60,7 +63,10 @@ struct HomeView: View {
             .overlay(alignment: .top) { Divider().overlay(Palette.rule) }
         }
         .background(Palette.p0)
-        .task { beta = await FoundingTester.isBetaBuild() }
+        .task {
+            beta = await FoundingTester.isBetaBuild()
+            offerClaim = await FoundingTester.shouldOfferClaim()
+        }
         .sheet(isPresented: $showingNew) {
             NewPlotSheet { name, starter, width, depth in
                 let plot = store.create(name: name, starter: starter, width: width, depth: depth)
