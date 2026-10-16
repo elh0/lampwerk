@@ -30,7 +30,8 @@ struct HomeView: View {
                         Button { open(plot.id) } label: { PlotRow(plot: plot) }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button("Delete", role: .destructive) { store.delete(plot) }
+                                Button("Duplicate", systemImage: "plus.square.on.square") { store.duplicate(plot) }
+                                Button("Delete", systemImage: "trash", role: .destructive) { store.delete(plot) }
                             }
                     }
                 }

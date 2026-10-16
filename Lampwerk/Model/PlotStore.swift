@@ -39,6 +39,17 @@ final class PlotStore {
         saveSoon()
     }
 
+    /// A copy at the top of the list, e.g. to try another setup on the same scene.
+    func duplicate(_ plot: Plot) {
+        var copy = plot
+        copy.id = UUID()
+        copy.name = plot.name + " (copy)"
+        copy.number = (plots.map(\.number).max() ?? 0) + 1
+        copy.updated = Date()
+        plots.insert(copy, at: 0)
+        save()
+    }
+
     func delete(_ plot: Plot) {
         plots.removeAll { $0.id == plot.id }
         save()

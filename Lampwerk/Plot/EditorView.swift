@@ -17,6 +17,8 @@ struct EditorView: View {
     @State private var sendAfterAR = false
     /// The name being typed in the rename box; nil when it's closed.
     @State private var renaming: String?
+    /// The lamps from the last Remove all, kept so it can be undone.
+    @State private var cleared: [PlacedLamp]?
 
     var body: some View {
         Group {
@@ -47,6 +49,29 @@ struct EditorView: View {
             }
             .frame(maxHeight: .infinity)
             .clipped()
+            .overlay(alignment: .bottom) {
+                if let cleared {
+                    HStack {
+                        Text("Removed \(cleared.count) lamps").font(.lwBody).foregroundStyle(Palette.text)
+                        Spacer()
+                        Button("Undo") {
+                            plot.wrappedValue.items = cleared
+                            self.cleared = nil
+                        }
+                        .buttonStyle(ActionButtonStyle(primary: true))
+                    }
+                    .padding(.horizontal, 14).frame(minHeight: 48)
+                    .background(Palette.p2, in: RoundedRectangle(cornerRadius: Radius.panel))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.panel).strokeBorder(Palette.rule))
+                    .padding(12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .task {
+                        try? await Task.sleep(for: .seconds(6))
+                        withAnimation { self.cleared = nil }
+                    }
+                }
+            }
+            .animation(.snappy(duration: 0.25), value: cleared?.count)
             bottom(plot)
         }
         .background(Palette.p0)
@@ -157,6 +182,12 @@ struct EditorView: View {
                         RailChip(number: n + 1, item: item, on: plot.wrappedValue.isOn(item), selected: item.id == selected) {
                             selected = selected == item.id ? nil : item.id
                         }
+                        .contextMenu {
+                            Button("Remove", systemImage: "minus.circle", role: .destructive) {
+                                plot.wrappedValue.items.removeAll { $0.id == item.id }
+                                if selected == item.id { selected = nil }
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
@@ -176,7 +207,26 @@ struct EditorView: View {
 
             HStack {
                 let on = plot.wrappedValue.lightsOn.count
-                Text("\(plot.wrappedValue.items.count) items · \(on) on").font(.lwData).foregroundStyle(Palette.quiet)
+                Menu {
+                    Button("Turn all on", systemImage: "lightbulb") { setAll(on: true, plot) }
+                    Button("Turn all off", systemImage: "lightbulb.slash") { setAll(on: false, plot) }
+                    if let id = selected, plot.wrappedValue.items.contains(where: { $0.id == id }) {
+                        Button("Remove selected", systemImage: "minus.circle") {
+                            plot.wrappedValue.items.removeAll { $0.id == id }
+                            selected = nil
+                        }
+                    }
+                    Divider()
+                    Button("Remove all lamps", systemImage: "trash", role: .destructive) { clearAll(plot) }
+                        .disabled(plot.wrappedValue.items.isEmpty)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("\(plot.wrappedValue.items.count) lamps · \(on) on").font(.lwData)
+                        Image(systemName: "ellipsis.circle").font(.system(size: 15))
+                    }
+                    .foregroundStyle(Palette.text)
+                    .frame(minHeight: 44)
+                }
                 Spacer()
                 Button("Add lamp") { showingLibrary = true }.buttonStyle(ActionButtonStyle(primary: true))
             }
@@ -186,6 +236,21 @@ struct EditorView: View {
         .background(Palette.p1)
         .overlay(alignment: .top) { Divider().overlay(Palette.rule) }
         .animation(.snappy(duration: 0.25), value: selected)
+    }
+
+    /// Every light in the current setup on or off at once. Grip frames are left alone.
+    private func setAll(on: Bool, _ plot: Binding<Plot>) {
+        let shot = plot.wrappedValue.shot
+        for i in plot.wrappedValue.items.indices where plot.wrappedValue.items[i].lamp?.isLight == true {
+            if on { plot.wrappedValue.items[i].offIn.remove(shot) } else { plot.wrappedValue.items[i].offIn.insert(shot) }
+        }
+    }
+
+    /// Empties the plan, with a few seconds to undo.
+    private func clearAll(_ plot: Binding<Plot>) {
+        cleared = plot.wrappedValue.items
+        selected = nil
+        plot.wrappedValue.items = []
     }
 
     /// Drops a new lamp up and to the left of the talent, aimed at them, and selects it.
