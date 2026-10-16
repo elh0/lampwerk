@@ -27,10 +27,31 @@ enum PlanDrawing {
         var showGrid = true
         var showLabels = true
         var lineWidth: CGFloat = 1
+        /// Ink on paper for the gaffer sheet: no gel, beams in a faint grey.
+        var paper = false
+    }
+
+    /// The few colours the plan is drawn in, for the dark screen or for paper.
+    struct Ink {
+        var bg = Palette.p0
+        var line = Palette.text.opacity(0.9)
+        var quiet = Palette.quiet
+        var grid = Palette.text.opacity(0.05)
+        var walls = Palette.text.opacity(0.5)
+        var beam = Palette.gel.opacity(Palette.beamOpacity)
+        var on = Palette.gel
+        var selection = Palette.gel
+
+        static let screen = Ink()
+        static let paper = Ink(
+            bg: Palette.paper, line: Palette.ink, quiet: Palette.ink.opacity(0.55), grid: Palette.ink.opacity(0.07),
+            walls: Palette.ink.opacity(0.8), beam: Palette.ink.opacity(0.07), on: Palette.ink, selection: Palette.ink
+        )
     }
 
     static func draw(_ plot: Plot, in ctx: GraphicsContext, viewport v: PlanViewport, options o: Options) {
-        let line = Palette.text.opacity(0.9)
+        let ink: Ink = o.paper ? .paper : .screen
+        let line = ink.line
         let stroke = StrokeStyle(lineWidth: o.lineWidth)
 
         if o.showGrid {
@@ -41,33 +62,33 @@ enum PlanDrawing {
             for y in stride(from: 1.0, to: plot.roomDepth, by: 1) {
                 grid.move(to: v.point(x: 0, y: y)); grid.addLine(to: v.point(x: plot.roomWidth, y: y))
             }
-            ctx.stroke(grid, with: .color(Palette.text.opacity(0.05)), style: stroke)
+            ctx.stroke(grid, with: .color(ink.grid), style: stroke)
         }
 
         // Beams under everything.
         for item in plot.items where plot.isOn(item) {
             guard let lamp = item.lamp else { continue }
-            ctx.fill(beam(item, lamp, v), with: .color(Palette.gel.opacity(Palette.beamOpacity)))
+            ctx.fill(beam(item, lamp, v), with: .color(ink.beam))
         }
 
         // Walls.
         let walls = Path(CGRect(origin: v.point(x: 0, y: 0), size: CGSize(width: plot.roomWidth * v.scale, height: plot.roomDepth * v.scale)))
-        ctx.stroke(walls, with: .color(Palette.text.opacity(0.5)), style: stroke)
+        ctx.stroke(walls, with: .color(ink.walls), style: stroke)
 
         // Camera, pointing at the talent.
-        drawCamera(plot, ctx, v, line, stroke)
+        drawCamera(plot, ctx, v, line, stroke, ink)
 
         // Talent.
         let t = v.point(plot.talent), tr = 0.2 * v.scale
         let head = Path(ellipseIn: CGRect(x: t.x - tr, y: t.y - tr, width: tr * 2, height: tr * 2))
-        ctx.fill(head, with: .color(Palette.p0))
+        ctx.fill(head, with: .color(ink.bg))
         ctx.stroke(head, with: .color(line), style: stroke)
-        if o.showLabels { label("TALENT", at: CGPoint(x: t.x, y: t.y + tr + 10), ctx) }
+        if o.showLabels { label("TALENT", at: CGPoint(x: t.x, y: t.y + tr + 10), ctx, color: ink.quiet) }
 
         // Heads and frames.
         for item in plot.items {
             guard let lamp = item.lamp else { continue }
-            drawHead(item, lamp, on: plot.isOn(item), selected: item.id == o.selected, ctx, v, line, stroke)
+            drawHead(item, lamp, on: plot.isOn(item), selected: item.id == o.selected, ctx, v, line, stroke, ink)
         }
 
         if o.showLabels {
@@ -76,7 +97,7 @@ enum PlanDrawing {
                 let reach = max(item.lamp?.width ?? 0.3, item.lamp?.depth ?? 0.3) / 2 + 0.35
                 let a = (item.angle + 180) * .pi / 180
                 let p = v.point(x: item.x + reach * cos(a), y: item.y + reach * sin(a))
-                label(String(format: "%02d", n + 1) + " " + item.role.title.uppercased(), at: p, ctx)
+                label(String(format: "%02d", n + 1) + " " + item.role.title.uppercased(), at: p, ctx, color: ink.quiet)
             }
         }
     }
@@ -97,7 +118,7 @@ enum PlanDrawing {
     }
 
     /// Simple top-down shapes for now; real drawn heads with generic twins are still to do.
-    static func drawHead(_ item: PlacedLamp, _ lamp: Lamp, on: Bool, selected: Bool, _ ctx: GraphicsContext, _ v: PlanViewport, _ line: Color, _ stroke: StrokeStyle) {
+    static func drawHead(_ item: PlacedLamp, _ lamp: Lamp, on: Bool, selected: Bool, _ ctx: GraphicsContext, _ v: PlanViewport, _ line: Color, _ stroke: StrokeStyle, _ ink: Ink = .screen) {
         var g = ctx
         let c = v.point(item.position)
         g.translateBy(x: c.x, y: c.y)
@@ -133,29 +154,29 @@ enum PlanDrawing {
         }
 
         if lamp.isGrip {
-            let fill: Color = lamp.kind == .flag ? line : Palette.p0
+            let fill: Color = lamp.kind == .flag ? line : ink.bg
             g.fill(body, with: .color(fill))
             g.stroke(body, with: .color(line), style: lamp.kind == .diff ? StrokeStyle(lineWidth: stroke.lineWidth, dash: [3, 2]) : stroke)
         } else {
-            g.fill(body, with: .color(Palette.p0))
+            g.fill(body, with: .color(ink.bg))
             g.stroke(body, with: .color(line), style: stroke)
             let dr = (lamp.kind == .tube ? 0.07 : min(0.09, max(0.06, lamp.depth * 0.22))) * s
             let dot = Path(ellipseIn: CGRect(x: dotX - dr, y: -dr, width: dr * 2, height: dr * 2))
             if on {
-                g.fill(dot, with: .color(Palette.gel))
+                g.fill(dot, with: .color(ink.on))
             } else {
-                g.fill(dot, with: .color(Palette.p0))
+                g.fill(dot, with: .color(ink.bg))
                 g.stroke(dot, with: .color(line), style: StrokeStyle(lineWidth: 0.8))
             }
         }
 
         if selected {
             let r = max(0.34, lamp.width * 0.66) * s
-            g.stroke(Path(ellipseIn: CGRect(x: dotX - r, y: -r, width: r * 2, height: r * 2)), with: .color(Palette.gel), style: StrokeStyle(lineWidth: 1.2))
+            g.stroke(Path(ellipseIn: CGRect(x: dotX - r, y: -r, width: r * 2, height: r * 2)), with: .color(ink.selection), style: StrokeStyle(lineWidth: 1.2))
         }
     }
 
-    static func drawCamera(_ plot: Plot, _ ctx: GraphicsContext, _ v: PlanViewport, _ line: Color, _ stroke: StrokeStyle) {
+    static func drawCamera(_ plot: Plot, _ ctx: GraphicsContext, _ v: PlanViewport, _ line: Color, _ stroke: StrokeStyle, _ ink: Ink = .screen) {
         var g = ctx
         let c = v.point(plot.camera)
         g.translateBy(x: c.x, y: c.y)
@@ -164,14 +185,14 @@ enum PlanDrawing {
         var lines = Path()
         lines.move(to: CGPoint(x: 0.2 * s, y: -0.1 * s)); lines.addLine(to: CGPoint(x: 1.3 * s, y: -0.55 * s))
         lines.move(to: CGPoint(x: 0.2 * s, y: 0.1 * s)); lines.addLine(to: CGPoint(x: 1.3 * s, y: 0.55 * s))
-        g.stroke(lines, with: .color(Palette.quiet), style: StrokeStyle(lineWidth: stroke.lineWidth, dash: [2, 4]))
+        g.stroke(lines, with: .color(ink.quiet), style: StrokeStyle(lineWidth: stroke.lineWidth, dash: [2, 4]))
         let body = Path(CGRect(x: -0.3 * s, y: -0.18 * s, width: 0.5 * s, height: 0.36 * s))
-        g.fill(body, with: .color(Palette.p0))
+        g.fill(body, with: .color(ink.bg))
         g.stroke(body, with: .color(line), style: stroke)
     }
 
-    static func label(_ text: String, at p: CGPoint, _ ctx: GraphicsContext) {
-        ctx.draw(Text(text).font(Fonts.mono(10, .regular)).foregroundStyle(Palette.quiet), at: p)
+    static func label(_ text: String, at p: CGPoint, _ ctx: GraphicsContext, color: Color = Palette.quiet) {
+        ctx.draw(Text(text).font(Fonts.mono(10, .regular)).foregroundStyle(color), at: p)
     }
 }
 

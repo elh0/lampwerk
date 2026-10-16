@@ -12,6 +12,9 @@ struct EditorView: View {
     @State private var zoom: CGFloat = 1
     @State private var showingAR = false
     @State private var confirmingAR = false
+    @State private var showingSend = false
+    /// Set when AR tagging finishes, so the send sheet follows straight after.
+    @State private var sendAfterAR = false
 
     var body: some View {
         Group {
@@ -59,15 +62,34 @@ struct EditorView: View {
         } message: {
             Text("Your tags replace the lamps on this plan.")
         }
-        .fullScreenCover(isPresented: $showingAR) {
+        .fullScreenCover(isPresented: $showingAR, onDismiss: {
+            if sendAfterAR {
+                sendAfterAR = false
+                showingSend = true
+            }
+        }) {
             ARTagView(base: plot.wrappedValue) { tagged in
                 if let tagged {
                     selected = nil
                     zoom = 1
                     plot.wrappedValue = tagged
+                    sendAfterAR = true
                 }
                 showingAR = false
             }
+        }
+        .sheet(isPresented: $showingSend) {
+            SendSheet(
+                plot: plot.wrappedValue,
+                supply: store.supply,
+                backToPlan: { showingSend = false },
+                allPlots: {
+                    showingSend = false
+                    close()
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationBackground(Palette.p1)
         }
     }
 
@@ -80,11 +102,14 @@ struct EditorView: View {
                     .font(.lwData).foregroundStyle(Palette.quiet)
             }
             .frame(maxWidth: .infinity)
-            Button("AR") {
-                if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }
+            HStack(spacing: 6) {
+                Button("AR") {
+                    if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }
+                }
+                .buttonStyle(ActionButtonStyle())
+                Button("Send") { showingSend = true }
+                    .buttonStyle(ActionButtonStyle(primary: true))
             }
-            .buttonStyle(ActionButtonStyle())
-            .frame(minWidth: 54, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .frame(minHeight: 56)

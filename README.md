@@ -19,6 +19,7 @@ If the project file ever won't open, regenerate it: `brew install xcodegen && xc
 | The plan: draw, drag, aim, pinch | `Plot/PlanCanvas.swift`, `Plot/PlanDrawing.swift` |
 | Inspector (role, output, colour, modifier, gel, switch, duplicate, mirror) | `Plot/Inspector.swift` |
 | Lamp library sheet | `Plot/LibrarySheet.swift` |
+| Send sheet: gaffer sheet PDF, plan image, text list; opens after AR Done | `Send/SendSheet.swift`, `Send/Export.swift` |
 | AR tagging: talent mark, camera, then lamps on the floor; Done lays them out as the plan | `AR/ARTagView.swift`, `AR/ARTagModel.swift`, `AR/ARContainer.swift` |
 
 Under the hood:
@@ -33,7 +34,7 @@ Under the hood:
 ## Not built yet
 
 - Light and Face views, false colour.
-- Gaffer sheet (A4 PDF), PNG export, view-only link.
+- Live link (web, no app) and laying a plot out on another set.
 - Recce photo tracing, Out & Scout handoff.
 - Voltage setting in the UI (the maths takes 230 V or 120 V).
 - Real drawn fixture art; the plan uses simple top-down shapes.
