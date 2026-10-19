@@ -78,7 +78,7 @@ struct FlickerWordmark: View {
                 }
             }
         }
-            .accessibilityLabel("Lampwerk")
+        .accessibilityLabel("Lampwerk")
     }
 }
 
