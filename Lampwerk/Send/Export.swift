@@ -47,7 +47,7 @@ enum Export {
         let circuits = LightMath.circuits(plot, supply: supply)
         let amps = circuits.reduce(0) { $0 + $1.amps }
         if amps > 0 { lines.append(String(format: "Power: %.1f A on %d × %.0f A at %.0f V", amps, circuits.count, supply.circuitAmps, supply.volts)) }
-        lines.append("Made with Lampwerk. Figures approximate.")
+        lines.append("Made with Lampwerk. Lux and draw from maker spec sheets where known.")
         return lines.joined(separator: "\n")
     }
 
@@ -82,7 +82,7 @@ struct PlanImage: View {
             HStack {
                 Text("\(plot.items.count) lamps").font(.lwData).foregroundStyle(Palette.quiet)
                 Spacer()
-                Text("Figures approximate").font(.lwData).foregroundStyle(Palette.quiet)
+                Text("Maker figures where known").font(.lwData).foregroundStyle(Palette.quiet)
             }
         }
         .padding(28)

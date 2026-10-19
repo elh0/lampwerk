@@ -25,8 +25,9 @@ If the project file ever won't open, regenerate it: `brew install xcodegen && xc
 
 Under the hood:
 
-- `Model/Lamp.swift`: the 31-item library, modifiers and gels with rough transmission. Watts and beams are approximate and still need checking against maker spec sheets.
-- `Model/LightMath.swift`: lux at the talent, bounce fill, key to fill ratio, amps (HMIs ×1.1), 16 A circuit packing. Ported from the web prototype; every figure is approximate.
+- `Model/Lamp.swift`: the 31-item library, modifiers and gels with rough transmission.
+- `Model/Specs.swift`: each light's lux at 3 m, measured beam and wall draw, with its source (maker sheet, hire house or retailer listing, or estimate). Add an id to `Lamp.checked` once a gaffer signs it off. Raw research in the Eltio project folder at `eltio/lampwerk/specs/`.
+- `Model/LightMath.swift`: lux at the talent, bounce fill, key to fill ratio, amps from the wall draw, circuit packing to the size picked in Power (UK 230 V or US 120 V). Lux starts from the spec's 3 m reading; heads without one use the old watts estimate.
 - `Model/Starters.swift`: three-point, Rembrandt, window key, car interior, empty room.
 - `Model/PlotStore.swift`: plots saved as JSON in Documents. No account.
 - `Design/Theme.swift`: brand v2 "Console" tokens. Gel (#FFC21A) only ever means light.

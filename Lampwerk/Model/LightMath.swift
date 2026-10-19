@@ -1,7 +1,7 @@
 import Foundation
 
 /// Light and power maths, ported from the prototype (`luxFrom`, `luxAt`, `itemAmps`, `circuits`).
-/// Every figure is approximate and the UI says so.
+/// Lux and draw start from maker spec sheets where `Lamp.specs` has one; the rest is estimated and the UI says which.
 enum LightMath {
     /// The mains on this job: the region sets the voltage, and circuits are packed to the breaker size picked.
     struct Supply: Codable, Hashable, Sendable {
@@ -27,8 +27,9 @@ enum LightMath {
     /// Warn when a circuit passes this share of its rating.
     static let warnShare = 0.8
 
-    /// Lux from one lamp at a point:
-    /// watts × efficacy × output × modifier × gel × diff ÷ (max(0.4, beam ÷ 60) × distance²) × 0.9.
+    /// Lux from one lamp at a point. Heads with a spec start from the maker's lux at 3 m:
+    /// lux3m × 9 ÷ distance² × output × modifier × gel × diff × beamGain (the beam opened or closed from the one measured).
+    /// Heads without one fall back to watts × efficacy ÷ (max(0.4, beam ÷ 60) × distance²) × 0.9.
     /// The beam is the one with the modifier and any diff frame in front. Outside the beam counts 12%.
     static func lux(from item: PlacedLamp, at p: Point2, in plot: Plot? = nil) -> Double {
         guard let lamp = item.lamp, lamp.isLight else { return 0 }
@@ -36,11 +37,22 @@ enum LightMath {
         let d = max(0.5, item.position.distance(to: p))
         let inBeam = beam >= 300 || angleBetween(item.position.bearing(to: p), item.angle) <= beam / 2 ? 1.0 : 0.12
         let frame = plot.flatMap { diffFrame(for: item, in: $0) }
-        let lumens = lamp.watts * lamp.efficacy * (item.output / 100)
+        let losses = (item.output / 100)
             * (Modifiers.loss[item.modifier] ?? 1) * (Gels.loss[item.gel] ?? 1)
             * (frame.map { diffLoss($0) } ?? 1)
+        if let spec = lamp.spec {
+            return (spec.lux3m * 9 / (d * d) * losses * inBeam * beamGain(from: spec.beam, to: beam)).rounded()
+        }
+        let lumens = lamp.watts * lamp.efficacy * losses
         let spreadFactor = max(0.4, beam / 60)
         return (lumens * inBeam / (spreadFactor * d * d) * 0.9).rounded()
+    }
+
+    /// Centre brightness after the beam goes from `measured` to `now` degrees, on the same curve as the
+    /// watts estimate (beam ÷ 60, never under 0.4), so the modifier table means the same thing either way.
+    static func beamGain(from measured: Double, to now: Double) -> Double {
+        guard measured < 300 else { return 1 }
+        return max(0.4, measured / 60) / max(0.4, now / 60)
     }
 
     /// The beam angle as it leaves the head: the modifier's if it has one, opened up by a diff frame in front.
@@ -99,9 +111,10 @@ enum LightMath {
         return trim(rounded) + ":1"
     }
 
-    /// Full draw of a head: watts ÷ volts, HMIs ×1.1 for the ballast.
+    /// Full draw of a head: the maker's wall draw ÷ volts. Without a spec, watts ÷ volts, HMIs ×1.1 for the ballast.
     static func amps(_ lamp: Lamp, supply: Supply = .uk) -> Double {
         guard lamp.isLight else { return 0 }
+        if let spec = lamp.spec { return spec.drawW / supply.volts }
         return lamp.watts / supply.volts * (lamp.isHMI ? 1.1 : 1)
     }
 
@@ -144,7 +157,7 @@ enum LightMath {
         var a = 0.0, w = 0.0
         for item in plot.lightsOn {
             a += amps(item, supply: supply)
-            w += item.lamp?.watts ?? 0
+            w += item.lamp.map { $0.spec?.drawW ?? $0.watts } ?? 0
         }
         return (a, w)
     }

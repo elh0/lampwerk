@@ -1,7 +1,7 @@
 import Foundation
 
 /// A head or a grip frame in the library. Ported from the prototype's `LIB`.
-/// Watts, beams and efficacy are approximate and still need checking against maker spec sheets.
+/// Watts and efficacy are only used for heads without a spec (see Specs.swift); beams match the spec sheets.
 struct Lamp: Identifiable, Hashable, Sendable {
     enum Kind: String, Codable, Sendable {
         case panel, point, fresnel, tube, practical, bounce, diff, flag
@@ -137,29 +137,29 @@ enum Modifiers {
 
 enum LampLibrary {
     static let all: [Lamp] = [
-        Lamp(id: "s30", name: "SkyPanel S30-C", brand: "Arri", group: .panels, kind: .panel, watts: 210, beam: 110, cct: 2800...10000, efficacy: 60, width: 0.68, depth: 0.36),
-        Lamp(id: "s60", name: "SkyPanel S60-C", brand: "Arri", group: .panels, kind: .panel, watts: 420, beam: 110, cct: 2800...10000, efficacy: 60, width: 0.68, depth: 0.36),
-        Lamp(id: "x21", name: "SkyPanel X21", brand: "Arri", group: .panels, kind: .panel, watts: 800, beam: 100, cct: 2000...20000, efficacy: 65, width: 0.9, depth: 0.45),
-        Lamp(id: "gem", name: "Gemini 1x1", brand: "Litepanels", group: .panels, kind: .panel, watts: 200, beam: 90, cct: 2700...10000, efficacy: 60, width: 0.4, depth: 0.4),
+        Lamp(id: "s30", name: "SkyPanel S30-C", brand: "Arri", group: .panels, kind: .panel, watts: 210, beam: 105, cct: 2800...10000, efficacy: 60, width: 0.68, depth: 0.36),
+        Lamp(id: "s60", name: "SkyPanel S60-C", brand: "Arri", group: .panels, kind: .panel, watts: 420, beam: 105, cct: 2800...10000, efficacy: 60, width: 0.68, depth: 0.36),
+        Lamp(id: "x21", name: "SkyPanel X21", brand: "Arri", group: .panels, kind: .panel, watts: 800, beam: 121, cct: 2000...20000, efficacy: 65, width: 0.9, depth: 0.45),
+        Lamp(id: "gem", name: "Gemini 1x1", brand: "Litepanels", group: .panels, kind: .panel, watts: 200, beam: 95, cct: 2700...10000, efficacy: 60, width: 0.4, depth: 0.4),
         Lamp(id: "lm4", name: "Litemat Spectrum 4", brand: "Litegear", group: .panels, kind: .panel, watts: 220, beam: 120, cct: 2700...6500, efficacy: 55, width: 1.2, depth: 0.3),
         Lamp(id: "a600", name: "600c Pro", brand: "Aputure", group: .point, kind: .point, watts: 720, beam: 55, cct: 2300...10000, efficacy: 70, width: 0.42, depth: 0.28),
-        Lamp(id: "a1200", name: "1200d Pro", brand: "Aputure", group: .point, kind: .point, watts: 1400, beam: 55, cct: 5600...5600, efficacy: 75, width: 0.5, depth: 0.32),
+        Lamp(id: "a1200", name: "1200d Pro", brand: "Aputure", group: .point, kind: .point, watts: 1400, beam: 66, cct: 5600...5600, efficacy: 75, width: 0.5, depth: 0.32),
         Lamp(id: "forza", name: "Forza 500", brand: "Nanlite", group: .point, kind: .point, watts: 580, beam: 55, cct: 5600...5600, efficacy: 70, width: 0.4, depth: 0.26),
-        Lamp(id: "vtx", name: "Vortex8", brand: "Creamsource", group: .point, kind: .panel, watts: 650, beam: 70, cct: 2200...15000, efficacy: 70, width: 0.6, depth: 0.32),
+        Lamp(id: "vtx", name: "Vortex8", brand: "Creamsource", group: .point, kind: .panel, watts: 650, beam: 110, cct: 2200...15000, efficacy: 70, width: 0.6, depth: 0.32),
         Lamp(id: "orb", name: "Orbiter", brand: "Arri", group: .point, kind: .point, watts: 500, beam: 60, cct: 2000...20000, efficacy: 65, width: 0.4, depth: 0.3),
-        Lamp(id: "titan", name: "Titan Tube", brand: "Astera", group: .tubes, kind: .tube, watts: 72, beam: 160, cct: 1750...20000, efficacy: 60, width: 1.03, depth: 0.06),
-        Lamp(id: "helios", name: "Helios Tube", brand: "Astera", group: .tubes, kind: .tube, watts: 36, beam: 160, cct: 1750...20000, efficacy: 60, width: 0.52, depth: 0.06),
+        Lamp(id: "titan", name: "Titan Tube", brand: "Astera", group: .tubes, kind: .tube, watts: 72, beam: 135, cct: 1750...20000, efficacy: 60, width: 1.03, depth: 0.06),
+        Lamp(id: "helios", name: "Helios Tube", brand: "Astera", group: .tubes, kind: .tube, watts: 36, beam: 135, cct: 1750...20000, efficacy: 60, width: 0.52, depth: 0.06),
         Lamp(id: "pavo", name: "PavoTube II 30X", brand: "Nanlite", group: .tubes, kind: .tube, watts: 36, beam: 160, cct: 2700...12000, efficacy: 55, width: 1.2, depth: 0.05),
         Lamp(id: "b7c", name: "Accent B7c", brand: "Aputure", group: .tubes, kind: .practical, watts: 7, beam: 300, cct: 2000...10000, efficacy: 60, width: 0.08, depth: 0.08),
-        Lamp(id: "h12", name: "1.2K HMI par", brand: "generic", group: .hmi, kind: .fresnel, watts: 1200, beam: 40, cct: 5600...5600, efficacy: 90, width: 0.42, depth: 0.34),
-        Lamp(id: "h4", name: "4K HMI par", brand: "generic", group: .hmi, kind: .fresnel, watts: 4000, beam: 35, cct: 5600...5600, efficacy: 90, width: 0.6, depth: 0.48),
-        Lamp(id: "m18", name: "M18", brand: "Arri", group: .hmi, kind: .fresnel, watts: 1800, beam: 45, cct: 5600...5600, efficacy: 90, width: 0.5, depth: 0.42),
-        Lamp(id: "h18", name: "18K HMI fresnel", brand: "generic", group: .hmi, kind: .fresnel, watts: 18000, beam: 30, cct: 5600...5600, efficacy: 95, width: 1, depth: 0.8),
-        Lamp(id: "t300", name: "300W fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 300, beam: 45, cct: 3200...3200, efficacy: 20, width: 0.22, depth: 0.2),
-        Lamp(id: "t650", name: "650W fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 650, beam: 45, cct: 3200...3200, efficacy: 20, width: 0.28, depth: 0.24),
-        Lamp(id: "t1k", name: "1K fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 1000, beam: 45, cct: 3200...3200, efficacy: 20, width: 0.34, depth: 0.28),
-        Lamp(id: "t2k", name: "2K fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 2000, beam: 45, cct: 3200...3200, efficacy: 20, width: 0.42, depth: 0.34),
-        Lamp(id: "red", name: "Redhead 800W", brand: "generic", group: .tungsten, kind: .point, watts: 800, beam: 60, cct: 3200...3200, efficacy: 20, width: 0.26, depth: 0.22),
+        Lamp(id: "h12", name: "1.2K HMI par", brand: "generic", group: .hmi, kind: .fresnel, watts: 1200, beam: 30, cct: 5600...5600, efficacy: 90, width: 0.42, depth: 0.34),
+        Lamp(id: "h4", name: "4K HMI par", brand: "generic", group: .hmi, kind: .fresnel, watts: 4000, beam: 30, cct: 5600...5600, efficacy: 90, width: 0.6, depth: 0.48),
+        Lamp(id: "m18", name: "M18", brand: "Arri", group: .hmi, kind: .fresnel, watts: 1800, beam: 40, cct: 5600...5600, efficacy: 90, width: 0.5, depth: 0.42),
+        Lamp(id: "h18", name: "18K HMI fresnel", brand: "generic", group: .hmi, kind: .fresnel, watts: 18000, beam: 50, cct: 5600...5600, efficacy: 95, width: 1, depth: 0.8),
+        Lamp(id: "t300", name: "300W fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 300, beam: 55, cct: 3200...3200, efficacy: 20, width: 0.22, depth: 0.2),
+        Lamp(id: "t650", name: "650W fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 650, beam: 54, cct: 3200...3200, efficacy: 20, width: 0.28, depth: 0.24),
+        Lamp(id: "t1k", name: "1K fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 1000, beam: 54, cct: 3200...3200, efficacy: 20, width: 0.34, depth: 0.28),
+        Lamp(id: "t2k", name: "2K fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 2000, beam: 57, cct: 3200...3200, efficacy: 20, width: 0.42, depth: 0.34),
+        Lamp(id: "red", name: "Redhead 800W", brand: "generic", group: .tungsten, kind: .point, watts: 800, beam: 87, cct: 3200...3200, efficacy: 20, width: 0.26, depth: 0.22),
         Lamp(id: "lamp", name: "Table lamp", brand: "practical", group: .practicals, kind: .practical, watts: 60, beam: 300, cct: 2700...2700, efficacy: 15, width: 0.3, depth: 0.3),
         Lamp(id: "china", name: "China ball", brand: "practical", group: .practicals, kind: .practical, watts: 150, beam: 300, cct: 2700...5600, efficacy: 40, width: 0.5, depth: 0.5),
         Lamp(id: "f4", name: "4x4 frame, ultra bounce", brand: "grip", group: .grip, kind: .bounce, watts: 0, beam: 0, cct: nil, efficacy: 0, width: 1.2, depth: 0.06),

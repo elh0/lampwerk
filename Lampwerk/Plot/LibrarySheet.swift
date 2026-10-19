@@ -75,7 +75,7 @@ struct LibraryRow: View {
             }
             Spacer()
             if lamp.isLight {
-                Text(String(format: "%@ W · %.1f A", Int(lamp.watts).formatted(), LightMath.amps(lamp)))
+                Text(String(format: "%@ W · %.1f A", Int(lamp.spec?.drawW ?? lamp.watts).formatted(), LightMath.amps(lamp)))
                     .font(.lwData).foregroundStyle(Palette.quiet)
             }
         }

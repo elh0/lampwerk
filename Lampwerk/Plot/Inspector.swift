@@ -43,6 +43,8 @@ struct Inspector: View {
                     .background(Palette.p0, in: RoundedRectangle(cornerRadius: Radius.card))
                     .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Palette.rule))
 
+                    if lamp.isLight { numbers(lamp) }
+
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 4) {
                             ForEach(Role.allCases, id: \.self) { role in
@@ -82,7 +84,45 @@ struct Inspector: View {
     private func meta(_ lamp: Lamp) -> String {
         guard lamp.isLight else { return lamp.group.rawValue }
         let beam = lamp.beam >= 300 ? "360°" : "\(Int(lamp.beam))°"
-        return "\(Int(lamp.watts).formatted()) W · \(beam) · approx"
+        let draw = lamp.spec?.drawW ?? lamp.watts
+        let trust = lamp.isChecked ? "checked" : lamp.spec?.source == .maker ? "maker spec" : "approx"
+        return "\(Int(draw).formatted()) W · \(beam) · \(trust)"
+    }
+
+    /// Where this head's numbers come from, whether a gaffer has checked them, and a way to say they're wrong.
+    private func numbers(_ lamp: Lamp) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 5) {
+                Image(systemName: lamp.isChecked ? "checkmark.seal.fill" : "doc.text")
+                    .font(.system(size: 11))
+                Text(lamp.spec?.source.title ?? "Approximate")
+                Text(lamp.isChecked ? "· checked by a gaffer" : "· not yet checked by a gaffer")
+                    .foregroundStyle(Palette.quiet)
+            }
+            .font(.lwChip).foregroundStyle(Palette.text)
+            if let spec = lamp.spec {
+                Text(spec.note).font(.lwChip).foregroundStyle(Palette.quiet).fixedSize(horizontal: false, vertical: true)
+            }
+            if let url = reportURL(lamp) {
+                Link("Report a wrong number", destination: url)
+                    .font(.lwChip).foregroundStyle(Palette.text).underline()
+                    .frame(minHeight: 30)
+            }
+        }
+    }
+
+    /// An email to the studio with the head and the figures the app is using, so the fix is easy to find.
+    private func reportURL(_ lamp: Lamp) -> URL? {
+        let figures = lamp.spec.map { "Using: \(Int($0.lux3m)) lx at 3 m, \(Int($0.beam))°, \(Int($0.drawW)) W draw. Source: \($0.url)" }
+            ?? "Using: \(Int(lamp.watts)) W, \(Int(lamp.beam))°."
+        var c = URLComponents()
+        c.scheme = "mailto"
+        c.path = "hello@eltio.studio"
+        c.queryItems = [
+            URLQueryItem(name: "subject", value: "Lampwerk: wrong number on \(lamp.fullName)"),
+            URLQueryItem(name: "body", value: "\(figures)\n\nWhat it should be, and where you got it:\n"),
+        ]
+        return c.url
     }
 
     private func spreadText(_ lamp: Lamp) -> String {
