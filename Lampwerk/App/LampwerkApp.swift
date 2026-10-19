@@ -19,7 +19,7 @@ struct LampwerkApp: App {
     }
 }
 
-/// Plots list, with the editor pushed over it. A short splash of the lockup on launch.
+/// Plots list, with the editor pushed over it. On launch the wordmark flickers on like a lamp striking.
 struct RootView: View {
     @Environment(PlotStore.self) private var store
     @State private var openPlot: Plot.ID?
@@ -39,16 +39,44 @@ struct RootView: View {
 
             if splash {
                 Palette.p0.ignoresSafeArea()
-                    .overlay(Lockup(height: 54))
+                    .overlay(FlickerWordmark())
                     .transition(.opacity)
                     .task {
-                        try? await Task.sleep(for: .seconds(0.9))
+                        try? await Task.sleep(for: .seconds(1.5))
                         splash = false
                     }
             }
         }
         .animation(.snappy(duration: 0.28), value: openPlot)
         .animation(.easeOut(duration: 0.35), value: splash)
+    }
+}
+
+/// The wordmark stuttering on like a head warming up, then holding. Same steps as the studio site's
+/// Lampwerk tile (cvflick); with Reduce Motion on it just fades in.
+struct FlickerWordmark: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Image("Wordmark").resizable().scaledToFit()
+            .frame(height: 36)
+            .foregroundStyle(Palette.text)
+            .keyframeAnimator(initialValue: reduceMotion ? 1.0 : 0.0, repeating: false) { view, opacity in
+                view.opacity(opacity)
+            } keyframes: { _ in
+                KeyframeTrack {
+                    if reduceMotion {
+                        CubicKeyframe(1, duration: 0.01)
+                    } else {
+                        LinearKeyframe(0.5, duration: 0.2)
+                        LinearKeyframe(0.08, duration: 0.15)
+                        LinearKeyframe(0.85, duration: 0.2)
+                        LinearKeyframe(0.3, duration: 0.15)
+                        CubicKeyframe(1, duration: 0.2)
+                    }
+                }
+            }
+            .accessibilityLabel("Lampwerk")
     }
 }
 
