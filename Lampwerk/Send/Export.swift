@@ -46,7 +46,7 @@ enum Export {
         }
         let circuits = LightMath.circuits(plot, supply: supply)
         let amps = circuits.reduce(0) { $0 + $1.amps }
-        if amps > 0 { lines.append(String(format: "Power: %.1f A on %d × 16 A", amps, circuits.count)) }
+        if amps > 0 { lines.append(String(format: "Power: %.1f A on %d × %.0f A at %.0f V", amps, circuits.count, supply.circuitAmps, supply.volts)) }
         lines.append("Made with Lampwerk. Figures approximate.")
         return lines.joined(separator: "\n")
     }
@@ -160,7 +160,7 @@ struct GafferSheet: View {
         return HStack {
             Text(String(format: "Full load %.1f A", amps))
             Spacer()
-            Text(circuits.isEmpty ? "No circuits" : "\(circuits.count) × 16 A circuits")
+            Text(circuits.isEmpty ? "No circuits" : "\(circuits.count) × \(Int(supply.circuitAmps)) A circuits, \(Int(supply.volts)) V")
         }
         .font(Fonts.mono(9, .regular)).foregroundStyle(ink)
     }

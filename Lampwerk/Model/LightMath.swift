@@ -3,13 +3,27 @@ import Foundation
 /// Light and power maths, ported from the prototype (`luxFrom`, `luxAt`, `itemAmps`, `circuits`).
 /// Every figure is approximate and the UI says so.
 enum LightMath {
-    /// Supply voltage. UK and EU 230 V, US 120 V.
-    enum Supply: Double, Codable, CaseIterable, Sendable {
-        case uk = 230
-        case us = 120
+    /// The mains on this job: the region sets the voltage, and circuits are packed to the breaker size picked.
+    struct Supply: Codable, Hashable, Sendable {
+        enum Region: String, Codable, CaseIterable, Sendable {
+            case uk, us
+
+            var volts: Double { self == .uk ? 230 : 120 }
+            var title: String { self == .uk ? "UK and Europe, 230 V" : "US, 120 V" }
+            /// Breaker sizes a spark plugs into: house sockets, ceeforms or stage pins, and distro.
+            var circuits: [Double] { self == .uk ? [13, 16, 32, 63] : [15, 20, 60, 100] }
+            var standardCircuit: Double { self == .uk ? 16 : 20 }
+        }
+
+        var region: Region
+        var circuitAmps: Double
+
+        var volts: Double { region.volts }
+
+        static let uk = Supply(region: .uk, circuitAmps: 16)
+        static let us = Supply(region: .us, circuitAmps: 20)
     }
 
-    static let circuitAmps = 16.0
     /// Warn when a circuit passes this share of its rating.
     static let warnShare = 0.8
 
@@ -88,7 +102,7 @@ enum LightMath {
     /// Full draw of a head: watts ÷ volts, HMIs ×1.1 for the ballast.
     static func amps(_ lamp: Lamp, supply: Supply = .uk) -> Double {
         guard lamp.isLight else { return 0 }
-        return lamp.watts / supply.rawValue * (lamp.isHMI ? 1.1 : 1)
+        return lamp.watts / supply.volts * (lamp.isHMI ? 1.1 : 1)
     }
 
     /// Draw at the current output. LED heads scale down, never below 15%.
@@ -102,22 +116,24 @@ enum LightMath {
         let id: String
         var amps: Double
         var items: [UUID]
-        var share: Double { amps / LightMath.circuitAmps }
+        /// The breaker size it's packed against.
+        var capacity: Double
+        var share: Double { amps / capacity }
         var isWarning: Bool { share > LightMath.warnShare }
     }
 
-    /// Packs every head on the plot into 16 A circuits at full draw, first fit, in plot order.
+    /// Packs every head on the plot into circuits of the supply's size at full draw, first fit, in plot order.
     static func circuits(_ plot: Plot, supply: Supply = .uk) -> [Circuit] {
         var out: [Circuit] = []
         for item in plot.items {
             guard let lamp = item.lamp, lamp.isLight else { continue }
             let a = amps(lamp, supply: supply)
-            if let i = out.firstIndex(where: { $0.amps + a <= circuitAmps }) {
+            if let i = out.firstIndex(where: { $0.amps + a <= supply.circuitAmps }) {
                 out[i].amps += a
                 out[i].items.append(item.id)
             } else {
                 let letter = String(Character(UnicodeScalar(UInt8(65 + out.count % 26))))
-                out.append(Circuit(id: letter, amps: a, items: [item.id]))
+                out.append(Circuit(id: letter, amps: a, items: [item.id], capacity: supply.circuitAmps))
             }
         }
         return out

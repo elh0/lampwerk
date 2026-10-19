@@ -341,7 +341,7 @@ struct Readout: View {
 
     var body: some View {
         let load = LightMath.load(plot, supply: supply)
-        let capacity = Double(max(1, LightMath.circuits(plot, supply: supply).count)) * LightMath.circuitAmps
+        let capacity = Double(max(1, LightMath.circuits(plot, supply: supply).count)) * supply.circuitAmps
         HStack(spacing: 6) {
             cell("Key") {
                 Text("\(Int(LightMath.keyLux(plot)).formatted()) lx")

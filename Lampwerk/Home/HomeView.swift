@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(PlotStore.self) private var store
     var open: (Plot.ID) -> Void
     @State private var showingNew = false
+    @State private var showingPower = false
     @State private var beta = false
     @State private var offerClaim = false
     @AppStorage(FoundingTester.dismissedKey) private var cardDismissed = false
@@ -14,6 +15,16 @@ struct HomeView: View {
             HStack {
                 Lockup()
                 Spacer()
+                Button { showingPower = true } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "bolt").font(.system(size: 11))
+                        Text("\(Int(store.supply.volts)) V · \(Int(store.supply.circuitAmps)) A")
+                    }
+                    .font(.lwData).foregroundStyle(Palette.quiet)
+                    .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Power: region and circuit size")
             }
             .padding(.horizontal, 16)
             .frame(minHeight: 56)
@@ -66,6 +77,11 @@ struct HomeView: View {
         .task {
             beta = await FoundingTester.isBetaBuild()
             offerClaim = await FoundingTester.shouldOfferClaim()
+        }
+        .sheet(isPresented: $showingPower) {
+            PowerSheet { showingPower = false }
+                .presentationDetents([.medium])
+                .presentationBackground(Palette.p1)
         }
         .sheet(isPresented: $showingNew) {
             NewPlotSheet { name, starter, width, depth in

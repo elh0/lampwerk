@@ -6,7 +6,18 @@ import Observation
 @Observable
 final class PlotStore {
     var plots: [Plot] = []
-    var supply: LightMath.Supply = .uk
+    /// Region and circuit size, kept between launches.
+    var supply: LightMath.Supply = PlotStore.savedSupply() {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(supply), forKey: Self.supplyKey) }
+    }
+
+    private static let supplyKey = "power.supply"
+
+    private static func savedSupply() -> LightMath.Supply {
+        guard let data = UserDefaults.standard.data(forKey: supplyKey),
+              let s = try? JSONDecoder().decode(LightMath.Supply.self, from: data) else { return .uk }
+        return s
+    }
 
     private let url = URL.documentsDirectory.appending(path: "plots.json")
 
