@@ -20,6 +20,8 @@ struct EditorView: View {
     /// The lamps from the last Remove all, kept so it can be undone.
     @State private var cleared: [PlacedLamp]?
     @State private var showingSpace = false
+    /// Compact height means an iPhone on its side: the plan takes the width, the controls go in a side column.
+    @Environment(\.verticalSizeClass) private var verticalSize
 
     var body: some View {
         Group {
@@ -34,49 +36,83 @@ struct EditorView: View {
     }
 
     private func editor(_ plot: Binding<Plot>) -> some View {
+        sheets(layout(plot), plot)
+    }
+
+    private func layout(_ plot: Binding<Plot>) -> some View {
         VStack(spacing: 0) {
             topBar(plot.wrappedValue)
-            shots(plot)
-            ZStack(alignment: .top) {
-                PlanCanvas(plot: plot, selected: $selected, zoom: $zoom)
-                Readout(plot: plot.wrappedValue, supply: store.supply)
-                    .padding(.horizontal, 12).padding(.top, 8)
-                if zoom != 1 {
-                    Button("Fit") { withAnimation(.snappy) { zoom = 1 } }
-                        .buttonStyle(ActionButtonStyle())
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .padding(.trailing, 16).padding(.top, 66)
-                }
-            }
-            .frame(maxHeight: .infinity)
-            .clipped()
-            .overlay(alignment: .bottom) {
-                if let cleared {
-                    HStack {
-                        Text("Removed \(cleared.count) lamps").font(.lwBody).foregroundStyle(Palette.text)
-                        Spacer()
-                        Button("Undo") {
-                            plot.wrappedValue.items = cleared
-                            self.cleared = nil
+            if verticalSize == .compact {
+                HStack(spacing: 0) {
+                    plan(plot)
+                    VStack(spacing: 0) {
+                        shots(plot)
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                rail(plot)
+                                inspector(plot)
+                            }
                         }
-                        .buttonStyle(ActionButtonStyle(primary: true))
+                        controls(plot)
+                            .overlay(alignment: .top) { Rectangle().fill(Palette.rule).frame(height: 1) }
                     }
-                    .padding(.horizontal, 14).frame(minHeight: 48)
-                    .background(Palette.p2, in: RoundedRectangle(cornerRadius: Radius.panel))
-                    .overlay(RoundedRectangle(cornerRadius: Radius.panel).strokeBorder(Palette.rule))
-                    .padding(12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .task {
-                        try? await Task.sleep(for: .seconds(6))
-                        withAnimation { self.cleared = nil }
-                    }
+                    .frame(width: 340)
+                    .background(Palette.p1)
+                    .overlay(alignment: .leading) { Rectangle().fill(Palette.rule).frame(width: 1) }
+                    .animation(.snappy(duration: 0.25), value: selected)
                 }
+            } else {
+                shots(plot)
+                plan(plot)
+                bottom(plot)
             }
-            .animation(.snappy(duration: 0.25), value: cleared?.count)
-            bottom(plot)
         }
         .background(Palette.p0)
-        .sheet(isPresented: $showingLibrary) {
+    }
+
+    /// The plan with the live readout over it, and the undo bar after Remove all.
+    private func plan(_ plot: Binding<Plot>) -> some View {
+        ZStack(alignment: .top) {
+            PlanCanvas(plot: plot, selected: $selected, zoom: $zoom)
+            Readout(plot: plot.wrappedValue, supply: store.supply)
+                .padding(.horizontal, 12).padding(.top, 8)
+            if zoom != 1 {
+                Button("Fit") { withAnimation(.snappy) { zoom = 1 } }
+                    .buttonStyle(ActionButtonStyle())
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.trailing, 16).padding(.top, 66)
+            }
+        }
+        .frame(maxHeight: .infinity)
+        .clipped()
+        .overlay(alignment: .bottom) {
+            if let cleared {
+                HStack {
+                    Text("Removed \(cleared.count) lamps").font(.lwBody).foregroundStyle(Palette.text)
+                    Spacer()
+                    Button("Undo") {
+                        plot.wrappedValue.items = cleared
+                        self.cleared = nil
+                    }
+                    .buttonStyle(ActionButtonStyle(primary: true))
+                }
+                .padding(.horizontal, 14).frame(minHeight: 48)
+                .background(Palette.p2, in: RoundedRectangle(cornerRadius: Radius.panel))
+                .overlay(RoundedRectangle(cornerRadius: Radius.panel).strokeBorder(Palette.rule))
+                .padding(12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .task {
+                    try? await Task.sleep(for: .seconds(6))
+                    withAnimation { self.cleared = nil }
+                }
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: cleared?.count)
+    }
+
+    /// The editor's sheets and covers, shared by both layouts.
+    private func sheets(_ content: some View, _ plot: Binding<Plot>) -> some View {
+        content.sheet(isPresented: $showingLibrary) {
             LibrarySheet { lamp in
                 add(lamp, to: plot)
                 showingLibrary = false
@@ -114,6 +150,9 @@ struct EditorView: View {
                 }
                 showingAR = false
             }
+            // Tagging and line-up are laid out for an upright phone.
+            .onAppear { Orientation.lock(.portrait) }
+            .onDisappear { Orientation.unlock() }
         }
         .sheet(isPresented: $showingSpace) {
             SpaceSheet(plot: plot) { showingSpace = false }
@@ -190,6 +229,18 @@ struct EditorView: View {
 
     private func bottom(_ plot: Binding<Plot>) -> some View {
         VStack(spacing: 0) {
+            rail(plot)
+            inspector(plot)
+            controls(plot)
+        }
+        .background(Palette.p1)
+        .overlay(alignment: .top) { Divider().overlay(Palette.rule) }
+        .animation(.snappy(duration: 0.25), value: selected)
+    }
+
+    /// Every lamp on the plan as a numbered chip; tap to select.
+    private func rail(_ plot: Binding<Plot>) -> some View {
+        VStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     ForEach(Array(plot.wrappedValue.items.enumerated()), id: \.element.id) { n, item in
@@ -213,43 +264,45 @@ struct EditorView: View {
                     .init(color: .black, location: 0.9), .init(color: .clear, location: 1),
                 ], startPoint: .leading, endPoint: .trailing)
             }
-            Divider().overlay(Palette.rule)
-
-            if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
-                Inspector(plot: plot, index: i, supply: store.supply, selected: $selected)
-            }
-
-            HStack {
-                let on = plot.wrappedValue.lightsOn.count
-                Menu {
-                    Button("Turn all on", systemImage: "lightbulb") { setAll(on: true, plot) }
-                    Button("Turn all off", systemImage: "lightbulb.slash") { setAll(on: false, plot) }
-                    if let id = selected, plot.wrappedValue.items.contains(where: { $0.id == id }) {
-                        Button("Remove selected", systemImage: "minus.circle") {
-                            plot.wrappedValue.items.removeAll { $0.id == id }
-                            selected = nil
-                        }
-                    }
-                    Divider()
-                    Button("Remove all lamps", systemImage: "trash", role: .destructive) { clearAll(plot) }
-                        .disabled(plot.wrappedValue.items.isEmpty)
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("\(plot.wrappedValue.items.count) lamps · \(on) on").font(.lwData)
-                        Image(systemName: "ellipsis.circle").font(.system(size: 15))
-                    }
-                    .foregroundStyle(Palette.text)
-                    .frame(minHeight: 44)
-                }
-                Spacer()
-                Button("Add lamp") { showingLibrary = true }.buttonStyle(ActionButtonStyle(primary: true))
-            }
-            .padding(.horizontal, 16)
-            .frame(minHeight: 54)
+            Rectangle().fill(Palette.rule).frame(height: 1)
         }
-        .background(Palette.p1)
-        .overlay(alignment: .top) { Divider().overlay(Palette.rule) }
-        .animation(.snappy(duration: 0.25), value: selected)
+    }
+
+    @ViewBuilder private func inspector(_ plot: Binding<Plot>) -> some View {
+        if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
+            Inspector(plot: plot, index: i, supply: store.supply, selected: $selected)
+        }
+    }
+
+    /// Lamp count with the all on / off menu, and Add lamp.
+    private func controls(_ plot: Binding<Plot>) -> some View {
+        HStack {
+            let on = plot.wrappedValue.lightsOn.count
+            Menu {
+                Button("Turn all on", systemImage: "lightbulb") { setAll(on: true, plot) }
+                Button("Turn all off", systemImage: "lightbulb.slash") { setAll(on: false, plot) }
+                if let id = selected, plot.wrappedValue.items.contains(where: { $0.id == id }) {
+                    Button("Remove selected", systemImage: "minus.circle") {
+                        plot.wrappedValue.items.removeAll { $0.id == id }
+                        selected = nil
+                    }
+                }
+                Divider()
+                Button("Remove all lamps", systemImage: "trash", role: .destructive) { clearAll(plot) }
+                    .disabled(plot.wrappedValue.items.isEmpty)
+            } label: {
+                HStack(spacing: 6) {
+                    Text("\(plot.wrappedValue.items.count) lamps · \(on) on").font(.lwData)
+                    Image(systemName: "ellipsis.circle").font(.system(size: 15))
+                }
+                .foregroundStyle(Palette.text)
+                .frame(minHeight: 44)
+            }
+            Spacer()
+            Button("Add lamp") { showingLibrary = true }.buttonStyle(ActionButtonStyle(primary: true))
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 54)
     }
 
     /// Every light in the current setup on or off at once. Grip frames are left alone.
