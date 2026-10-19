@@ -150,9 +150,6 @@ struct EditorView: View {
                 }
                 showingAR = false
             }
-            // Tagging and line-up are laid out for an upright phone.
-            .onAppear { Orientation.lock(.portrait) }
-            .onDisappear { Orientation.unlock() }
         }
         .sheet(isPresented: $showingSpace) {
             SpaceSheet(plot: plot) { showingSpace = false }

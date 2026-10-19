@@ -2,7 +2,6 @@ import SwiftUI
 
 @main
 struct LampwerkApp: App {
-    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var store = PlotStore()
 
     init() {
@@ -81,32 +80,4 @@ struct FlickerWordmark: View {
         }
         .accessibilityLabel("Lampwerk")
     }
-}
-
-/// Lets one screen hold the phone upright (AR tagging) while the rest of the app turns to landscape.
-final class AppDelegate: NSObject, UIApplicationDelegate {
-    static var orientations: UIInterfaceOrientationMask = .allButUpsideDown
-
-    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        Self.orientations
-    }
-}
-
-enum Orientation {
-    /// Limits the app to `mask` and turns the screen to match straight away.
-    @MainActor static func lock(_ mask: UIInterfaceOrientationMask) {
-        AppDelegate.orientations = mask
-        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
-            for window in scene.windows {
-                var vc = window.rootViewController
-                while let v = vc {
-                    v.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    vc = v.presentedViewController
-                }
-            }
-        }
-    }
-
-    @MainActor static func unlock() { lock(.allButUpsideDown) }
 }

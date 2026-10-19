@@ -8,6 +8,8 @@ struct ARTagView: View {
     var finish: (Plot?) -> Void
 
     @State private var model = ARTagModel()
+    /// Compact height is the phone on its side: the shutter moves to the right edge like the Camera app.
+    @Environment(\.verticalSizeClass) private var verticalSize
     /// A plot with a floor plan starts by picking two spots on it to line AR up with.
     @State private var liningUp: Bool
 
@@ -34,11 +36,29 @@ struct ARTagView: View {
             Color.black.ignoresSafeArea()
             ARContainer(model: model).ignoresSafeArea()
             labels
-            VStack(spacing: 0) {
-                topBar
-                hint.padding(.top, 10)
-                Spacer()
-                bottom
+            if verticalSize == .compact {
+                VStack(spacing: 0) {
+                    topBar
+                    hint.padding(.top, 6)
+                    Spacer()
+                }
+                HStack(alignment: .bottom, spacing: 0) {
+                    sidePanel
+                    Spacer(minLength: 12)
+                    VStack(spacing: 14) {
+                        shutter
+                        Button("Undo") { model.undo() }.buttonStyle(ActionButtonStyle())
+                    }
+                    .padding(.trailing, 16).padding(.bottom, 12)
+                }
+                .frame(maxHeight: .infinity, alignment: .bottom)
+            } else {
+                VStack(spacing: 0) {
+                    topBar
+                    hint.padding(.top, 10)
+                    Spacer()
+                    bottom
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -146,23 +166,41 @@ struct ARTagView: View {
                 Button("Undo") { model.undo() }
                     .buttonStyle(ActionButtonStyle())
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Button { model.tag() } label: {
-                    ZStack {
-                        Circle().strokeBorder(Palette.text, lineWidth: 2.5).frame(width: 70, height: 70)
-                        Image(systemName: "plus").font(.system(size: 26, weight: .light)).foregroundStyle(Palette.text)
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(model.reticle == nil)
-                .opacity(model.reticle == nil ? 0.35 : 1)
-                .sensoryFeedback(.impact(weight: .light), trigger: model.revision)
-                .accessibilityLabel("Tag this point")
+                shutter
                 Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
             }
             .padding(.horizontal, 16)
             .padding(.top, 8).padding(.bottom, 12)
         }
         .background(LinearGradient(colors: [Palette.p0.opacity(0), Palette.p0.opacity(0.92)], startPoint: .top, endPoint: .init(x: 0.5, y: 0.25)))
+    }
+
+    private var shutter: some View {
+        Button { model.tag() } label: {
+            ZStack {
+                Circle().strokeBorder(Palette.text, lineWidth: 2.5).frame(width: 70, height: 70)
+                Image(systemName: "plus").font(.system(size: 26, weight: .light)).foregroundStyle(Palette.text)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(model.reticle == nil)
+        .opacity(model.reticle == nil ? 0.35 : 1)
+        .sensoryFeedback(.impact(weight: .light), trigger: model.revision)
+        .accessibilityLabel("Tag this point")
+    }
+
+    /// On its side: the selected tag or the lamp rail sits bottom left, clear of the reticle in the middle.
+    @ViewBuilder private var sidePanel: some View {
+        if let id = model.selected, let i = model.tags.firstIndex(where: { $0.id == id }) {
+            inspector(i)
+                .frame(width: 380)
+                .padding(.bottom, 12)
+        } else if model.step == .lamps {
+            rail
+                .frame(maxWidth: 360)
+                .background(Palette.p0.opacity(0.75), in: RoundedRectangle(cornerRadius: Radius.panel))
+                .padding(.leading, 12).padding(.bottom, 16)
+        }
     }
 
     private var rail: some View {

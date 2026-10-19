@@ -10,6 +10,8 @@ struct LineUpView: View {
 
     @State private var a: Point2?
     @State private var b: Point2?
+    /// On its side the plan takes the left and the words and buttons go in a column on the right.
+    @Environment(\.verticalSizeClass) private var verticalSize
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,47 +23,72 @@ struct LineUpView: View {
                 Button("Skip", action: skip).buttonStyle(ActionButtonStyle())
             }
             .padding(.horizontal, 16).frame(minHeight: 56)
-            Divider().overlay(Palette.rule)
+            Rectangle().fill(Palette.rule).frame(height: 1)
 
-            Text(prompt)
-                .font(.lwBody).foregroundStyle(Palette.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-
-            GeometryReader { geo in
-                let v = PlanViewport.fit(plot, in: geo.size, margin: 0.4)
-                ZStack {
-                    Canvas { ctx, _ in
-                        var bare = plot
-                        bare.items = []
-                        PlanDrawing.draw(bare, in: ctx, viewport: v, options: .init(showLabels: false))
+            if verticalSize == .compact {
+                HStack(spacing: 0) {
+                    planPicker
+                    VStack(alignment: .leading, spacing: 0) {
+                        promptText
+                        Spacer()
+                        buttons.frame(minHeight: 60)
                     }
-                    if let a { pin("A", at: v.point(a)) }
-                    if let b { pin("B", at: v.point(b)) }
+                    .frame(width: 300)
+                    .background(Palette.p1)
+                    .overlay(alignment: .leading) { Rectangle().fill(Palette.rule).frame(width: 1) }
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { location in
-                    let p = v.metres(location)
-                    guard p.x > -0.5, p.y > -0.5, p.x < plot.roomWidth + 0.5, p.y < plot.roomDepth + 0.5 else { return }
-                    if a == nil || b != nil { a = p; b = nil } else { b = p }
-                }
+            } else {
+                promptText
+                planPicker
+                buttons
+                    .frame(minHeight: 60)
+                    .background(Palette.p1)
+                    .overlay(alignment: .top) { Rectangle().fill(Palette.rule).frame(height: 1) }
             }
-
-            HStack {
-                Button("Reset") { a = nil; b = nil }
-                    .buttonStyle(ActionButtonStyle())
-                    .disabled(a == nil)
-                Spacer()
-                Button("Start AR") { if let a, let b { start(a, b) } }
-                    .buttonStyle(ActionButtonStyle(primary: true))
-                    .disabled(!ready)
-                    .opacity(ready ? 1 : 0.4)
-            }
-            .padding(.horizontal, 16).frame(minHeight: 60)
-            .background(Palette.p1)
-            .overlay(alignment: .top) { Divider().overlay(Palette.rule) }
         }
         .background(Palette.p0)
+    }
+
+    private var promptText: some View {
+        Text(prompt)
+            .font(.lwBody).foregroundStyle(Palette.text)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    private var planPicker: some View {
+        GeometryReader { geo in
+            let v = PlanViewport.fit(plot, in: geo.size, margin: 0.4)
+            ZStack {
+                Canvas { ctx, _ in
+                    var bare = plot
+                    bare.items = []
+                    PlanDrawing.draw(bare, in: ctx, viewport: v, options: .init(showLabels: false))
+                }
+                if let a { pin("A", at: v.point(a)) }
+                if let b { pin("B", at: v.point(b)) }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { location in
+                let p = v.metres(location)
+                guard p.x > -0.5, p.y > -0.5, p.x < plot.roomWidth + 0.5, p.y < plot.roomDepth + 0.5 else { return }
+                if a == nil || b != nil { a = p; b = nil } else { b = p }
+            }
+        }
+    }
+
+    private var buttons: some View {
+        HStack {
+            Button("Reset") { a = nil; b = nil }
+                .buttonStyle(ActionButtonStyle())
+                .disabled(a == nil)
+            Spacer()
+            Button("Start AR") { if let a, let b { start(a, b) } }
+                .buttonStyle(ActionButtonStyle(primary: true))
+                .disabled(!ready)
+                .opacity(ready ? 1 : 0.4)
+        }
+        .padding(.horizontal, 16)
     }
 
     private var ready: Bool {
