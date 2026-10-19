@@ -58,16 +58,17 @@ struct FlickerWordmark: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Image("Wordmark").resizable().scaledToFit()
+        let mark = Image("Wordmark").resizable().scaledToFit()
             .frame(height: 36)
             .foregroundStyle(Palette.text)
-            .keyframeAnimator(initialValue: reduceMotion ? 1.0 : 0.0, repeating: false) { view, opacity in
-                view.opacity(opacity)
-            } keyframes: { _ in
-                KeyframeTrack {
-                    if reduceMotion {
-                        CubicKeyframe(1, duration: 0.01)
-                    } else {
+        Group {
+            if reduceMotion {
+                mark
+            } else {
+                mark.keyframeAnimator(initialValue: 0.0, repeating: false) { view, opacity in
+                    view.opacity(opacity)
+                } keyframes: { _ in
+                    KeyframeTrack {
                         LinearKeyframe(0.5, duration: 0.2)
                         LinearKeyframe(0.08, duration: 0.15)
                         LinearKeyframe(0.85, duration: 0.2)
@@ -76,6 +77,7 @@ struct FlickerWordmark: View {
                     }
                 }
             }
+        }
             .accessibilityLabel("Lampwerk")
     }
 }
