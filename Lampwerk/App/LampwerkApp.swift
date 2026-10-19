@@ -42,7 +42,7 @@ struct RootView: View {
                     .overlay(FlickerWordmark())
                     .transition(.opacity)
                     .task {
-                        try? await Task.sleep(for: .seconds(1.5))
+                        try? await Task.sleep(for: .seconds(2.1))
                         splash = false
                     }
             }
@@ -53,7 +53,7 @@ struct RootView: View {
 }
 
 /// The wordmark stuttering on like a head warming up, then holding. Same steps as the studio site's
-/// Lampwerk tile (cvflick); with Reduce Motion on it just fades in.
+/// Lampwerk tile (cvflick, timings in eltio/brand/wordmark-motion/README.md); with Reduce Motion on it just shows.
 struct FlickerWordmark: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -69,11 +69,12 @@ struct FlickerWordmark: View {
                     view.opacity(opacity)
                 } keyframes: { _ in
                     KeyframeTrack {
-                        LinearKeyframe(0.5, duration: 0.2)
-                        LinearKeyframe(0.08, duration: 0.15)
-                        LinearKeyframe(0.85, duration: 0.2)
-                        LinearKeyframe(0.3, duration: 0.15)
-                        CubicKeyframe(1, duration: 0.2)
+                        // cvflick at the splash speed (cv-quick, 4 s): 0/2/3.5/5.5/7/9% of the loop.
+                        CubicKeyframe(0.5, duration: 0.08)
+                        CubicKeyframe(0.08, duration: 0.06)
+                        CubicKeyframe(0.85, duration: 0.08)
+                        CubicKeyframe(0.3, duration: 0.06)
+                        CubicKeyframe(1, duration: 0.08)
                     }
                 }
             }
