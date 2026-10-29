@@ -39,12 +39,14 @@ struct HomeView: View {
             Divider().overlay(Palette.rule)
 
             ScrollView {
-                LazyVStack(spacing: 8) {
-                    if offerClaim {
-                        FoundingClaimCard()
-                    } else if beta && !cardDismissed {
-                        FoundingTesterCard { withAnimation { cardDismissed = true } }
-                    }
+                if offerClaim {
+                    FoundingClaimCard().padding([.horizontal, .top], 12)
+                } else if beta && !cardDismissed {
+                    FoundingTesterCard { withAnimation { cardDismissed = true } }
+                        .padding([.horizontal, .top], 12)
+                }
+                // One column upright; on its side the plots sit side by side.
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 8)], spacing: 8) {
                     ForEach(store.plots) { plot in
                         Button { open(plot.id) } label: { PlotRow(plot: plot) }
                             .buttonStyle(.plain)
@@ -80,6 +82,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showingPower) {
             PowerSheet { showingPower = false }
+                .readableWidth()
                 .presentationDetents([.medium])
                 .presentationBackground(Palette.p1)
         }
@@ -89,6 +92,7 @@ struct HomeView: View {
                 showingNew = false
                 open(plot.id)
             }
+            .readableWidth()
             .presentationDetents([.large])
             .presentationBackground(Palette.p1)
         }

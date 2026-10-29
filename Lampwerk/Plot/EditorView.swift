@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One plot: setups along the top, the plan with a live readout, lamps and the inspector below.
+/// One plot: the plan fills the screen, with one drawer for setups, lamps and the selected lamp.
 struct EditorView: View {
     @Environment(PlotStore.self) private var store
     let plotID: Plot.ID
@@ -20,7 +20,9 @@ struct EditorView: View {
     /// The lamps from the last Remove all, kept so it can be undone.
     @State private var cleared: [PlacedLamp]?
     @State private var showingSpace = false
-    /// Compact height means an iPhone on its side: the plan takes the width, the controls go in a side column.
+    /// Closed, the drawer shows setups and the lamp count; open, it adds the lamps and the inspector.
+    @State private var drawerOpen = false
+    /// Compact height means an iPhone on its side: the drawer becomes a column on the right.
     @Environment(\.verticalSizeClass) private var verticalSize
 
     var body: some View {
@@ -40,48 +42,36 @@ struct EditorView: View {
     }
 
     private func layout(_ plot: Binding<Plot>) -> some View {
-        VStack(spacing: 0) {
+        let wide = verticalSize == .compact
+        return VStack(spacing: 0) {
             topBar(plot.wrappedValue)
-            if verticalSize == .compact {
-                HStack(spacing: 0) {
-                    plan(plot)
-                    VStack(spacing: 0) {
-                        shots(plot)
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                rail(plot)
-                                inspector(plot)
-                            }
-                        }
-                        controls(plot)
-                            .overlay(alignment: .top) { Rectangle().fill(Palette.rule).frame(height: 1) }
-                    }
-                    .frame(width: 340)
-                    .background(Palette.p1)
-                    .overlay(alignment: .leading) { Rectangle().fill(Palette.rule).frame(width: 1) }
-                    .animation(.snappy(duration: 0.25), value: selected)
-                }
-            } else {
-                shots(plot)
+            ZStack(alignment: wide ? .topTrailing : .bottom) {
                 plan(plot)
-                bottom(plot)
+                    // Keep the plan clear of the drawer: the closed bar in portrait, the open column on its side.
+                    .padding(.bottom, wide ? 0 : 62)
+                    .padding(.trailing, wide && drawerOpen ? 360 : 0)
+                drawer(plot, wide: wide)
             }
         }
         .background(Palette.p0)
+        .animation(.snappy(duration: 0.25), value: drawerOpen)
+        .animation(.snappy(duration: 0.25), value: selected)
+        .onChange(of: selected) { _, new in if new != nil { drawerOpen = true } }
     }
 
     /// The plan with the live readout over it, and the undo bar after Remove all.
     private func plan(_ plot: Binding<Plot>) -> some View {
         ZStack(alignment: .top) {
             PlanCanvas(plot: plot, selected: $selected, zoom: $zoom)
-            Readout(plot: plot.wrappedValue, supply: store.supply)
-                .padding(.horizontal, 12).padding(.top, 8)
-            if zoom != 1 {
-                Button("Fit") { withAnimation(.snappy) { zoom = 1 } }
-                    .buttonStyle(ActionButtonStyle())
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.trailing, 16).padding(.top, 66)
+            HStack(alignment: .top) {
+                Readout(plot: plot.wrappedValue, supply: store.supply)
+                Spacer(minLength: 8)
+                if zoom != 1 {
+                    Button("Fit") { withAnimation(.snappy) { zoom = 1 } }
+                        .buttonStyle(ActionButtonStyle())
+                }
             }
+            .padding(.horizontal, 12).padding(.top, 8)
         }
         .frame(maxHeight: .infinity)
         .clipped()
@@ -117,6 +107,7 @@ struct EditorView: View {
                 add(lamp, to: plot)
                 showingLibrary = false
             }
+            .readableWidth()
             .presentationDetents([.medium, .large])
             .presentationBackground(Palette.p1)
         }
@@ -153,6 +144,7 @@ struct EditorView: View {
         }
         .sheet(isPresented: $showingSpace) {
             SpaceSheet(plot: plot) { showingSpace = false }
+                .readableWidth()
                 .presentationDetents([.medium, .large])
                 .presentationBackground(Palette.p1)
         }
@@ -166,20 +158,26 @@ struct EditorView: View {
                     close()
                 }
             )
+            .readableWidth()
             .presentationDetents([.medium, .large])
             .presentationBackground(Palette.p1)
         }
     }
 
+    /// Back, the plot's name and size, Add (a lamp, or the whole room in AR) and Send.
     private func topBar(_ plot: Plot) -> some View {
-        HStack(spacing: 12) {
-            Button("Plots", action: close).buttonStyle(ActionButtonStyle())
-            VStack(spacing: 1) {
+        HStack(spacing: 10) {
+            Button(action: close) {
+                Image(systemName: "chevron.left").font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Palette.text)
+                    .frame(width: 34, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("All plots")
+            VStack(alignment: .leading, spacing: 1) {
                 Button { renaming = plot.name } label: {
-                    HStack(spacing: 5) {
-                        Text(plot.name).font(.lwTitle).foregroundStyle(Palette.text).lineLimit(1)
-                        Image(systemName: "pencil").font(.system(size: 11)).foregroundStyle(Palette.quiet)
-                    }
+                    Text(plot.name).font(.lwTitle).foregroundStyle(Palette.text).lineLimit(1)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Rename \(plot.name)")
@@ -194,45 +192,97 @@ struct EditorView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Space size and floor plan")
             }
-            .frame(maxWidth: .infinity)
-            HStack(spacing: 6) {
-                Button("AR") {
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Menu {
+                Button("Add a lamp", systemImage: "plus") { showingLibrary = true }
+                Button("Tag the room in AR", systemImage: "arkit") {
                     if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }
                 }
-                .buttonStyle(ActionButtonStyle())
-                Button("Send") { showingSend = true }
-                    .buttonStyle(ActionButtonStyle(primary: true))
+            } label: {
+                Text("Add")
+                    .font(.lwButton).foregroundStyle(Palette.text)
+                    .padding(.horizontal, 12).frame(minHeight: 34)
+                    .background(Palette.p2, in: RoundedRectangle(cornerRadius: Radius.chip))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.chip).strokeBorder(Palette.rule))
             }
+            Button("Send") { showingSend = true }
+                .buttonStyle(ActionButtonStyle(primary: true))
         }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 56)
+        .padding(.leading, 6).padding(.trailing, 16)
+        .frame(minHeight: 52)
         .background(Palette.p1)
         .overlay(alignment: .bottom) { Divider().overlay(Palette.rule) }
     }
 
-    private func shots(_ plot: Binding<Plot>) -> some View {
-        HStack(spacing: 4) {
-            ForEach(Shot.allCases, id: \.self) { shot in
-                Chip(title: shot.title, selected: plot.wrappedValue.shot == shot) {
-                    plot.wrappedValue.shot = shot
+    /// One drawer under the plan, or down the right on its side. Closed: setups and the lamp count.
+    /// Open: every lamp as a chip and the selected lamp's settings. Tap or drag the handle.
+    private func drawer(_ plot: Binding<Plot>, wide: Bool) -> some View {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: Radius.panel,
+            bottomLeadingRadius: wide ? Radius.panel : 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: wide ? 0 : Radius.panel
+        )
+        return VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                Button {
+                    drawerOpen.toggle()
+                    if !drawerOpen { selected = nil }
+                } label: {
+                    Capsule().fill(Palette.ruleStrong).frame(width: 36, height: 4)
+                        .frame(maxWidth: .infinity, minHeight: 16)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(drawerOpen ? "Close lamps" : "Open lamps")
+                HStack(spacing: 4) {
+                    ForEach(Shot.allCases, id: \.self) { shot in
+                        Chip(title: shot.title, selected: plot.wrappedValue.shot == shot) {
+                            plot.wrappedValue.shot = shot
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    lampsMenu(plot)
+                }
+                .padding(.horizontal, 16).padding(.bottom, 6)
             }
-            Spacer()
+            // Only the handle and the setup row drag, so the lamp chips and sliders keep their own gestures.
+            .gesture(DragGesture(minimumDistance: 12).onEnded { drag in
+                let pull = wide ? -drag.translation.width : -drag.translation.height
+                if pull > 30 { drawerOpen = true }
+                if pull < -30 {
+                    drawerOpen = false
+                    selected = nil
+                }
+            })
+            if drawerOpen {
+                Rectangle().fill(Palette.rule).frame(height: 1)
+                if plot.wrappedValue.items.isEmpty {
+                    hint("No lamps yet. Tap Add to place one, or tag the room in AR.")
+                } else {
+                    rail(plot)
+                    if selected == nil {
+                        hint("Tap a lamp to change it. Drag it on the plan to move it.")
+                    }
+                    inspector(plot)
+                }
+                if wide { Spacer(minLength: 0) }
+            }
         }
-        .padding(.horizontal, 16).padding(.vertical, 8)
-        .background(Palette.p1)
-        .overlay(alignment: .bottom) { Divider().overlay(Palette.rule) }
+        .frame(width: wide ? 360 : nil)
+        .frame(maxWidth: wide ? nil : .infinity)
+        .frame(maxHeight: wide && drawerOpen ? .infinity : nil, alignment: .top)
+        .background(Palette.p1, in: shape)
+        .overlay { shape.stroke(Palette.rule, lineWidth: 1) }
+        .padding(.top, wide && drawerOpen ? 8 : 0)
+        .frame(maxHeight: .infinity, alignment: wide && drawerOpen ? .top : .bottom)
     }
 
-    private func bottom(_ plot: Binding<Plot>) -> some View {
-        VStack(spacing: 0) {
-            rail(plot)
-            inspector(plot)
-            controls(plot)
-        }
-        .background(Palette.p1)
-        .overlay(alignment: .top) { Divider().overlay(Palette.rule) }
-        .animation(.snappy(duration: 0.25), value: selected)
+    private func hint(_ text: String) -> some View {
+        Text(text)
+            .font(.lwBody).foregroundStyle(Palette.quiet)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
     }
 
     /// Every lamp on the plan as a numbered chip; tap to select.
@@ -271,35 +321,23 @@ struct EditorView: View {
         }
     }
 
-    /// Lamp count with the all on / off menu, and Add lamp.
-    private func controls(_ plot: Binding<Plot>) -> some View {
-        HStack {
-            let on = plot.wrappedValue.lightsOn.count
-            Menu {
-                Button("Turn all on", systemImage: "lightbulb") { setAll(on: true, plot) }
-                Button("Turn all off", systemImage: "lightbulb.slash") { setAll(on: false, plot) }
-                if let id = selected, plot.wrappedValue.items.contains(where: { $0.id == id }) {
-                    Button("Remove selected", systemImage: "minus.circle") {
-                        plot.wrappedValue.items.removeAll { $0.id == id }
-                        selected = nil
-                    }
-                }
-                Divider()
-                Button("Remove all lamps", systemImage: "trash", role: .destructive) { clearAll(plot) }
-                    .disabled(plot.wrappedValue.items.isEmpty)
-            } label: {
-                HStack(spacing: 6) {
-                    Text("\(plot.wrappedValue.items.count) lamps · \(on) on").font(.lwData)
-                    Image(systemName: "ellipsis.circle").font(.system(size: 15))
-                }
-                .foregroundStyle(Palette.text)
-                .frame(minHeight: 44)
+    /// Lamp count, with all on, all off and remove all.
+    private func lampsMenu(_ plot: Binding<Plot>) -> some View {
+        let on = plot.wrappedValue.lightsOn.count
+        return Menu {
+            Button("Turn all on", systemImage: "lightbulb") { setAll(on: true, plot) }
+            Button("Turn all off", systemImage: "lightbulb.slash") { setAll(on: false, plot) }
+            Divider()
+            Button("Remove all lamps", systemImage: "trash", role: .destructive) { clearAll(plot) }
+                .disabled(plot.wrappedValue.items.isEmpty)
+        } label: {
+            HStack(spacing: 6) {
+                Text("\(plot.wrappedValue.items.count) lamps · \(on) on").font(.lwData)
+                Image(systemName: "ellipsis.circle").font(.system(size: 15))
             }
-            Spacer()
-            Button("Add lamp") { showingLibrary = true }.buttonStyle(ActionButtonStyle(primary: true))
+            .foregroundStyle(Palette.text)
+            .frame(minHeight: 40)
         }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 54)
     }
 
     /// Every light in the current setup on or off at once. Grip frames are left alone.
@@ -331,7 +369,7 @@ struct EditorView: View {
     }
 }
 
-/// Key at talent, key to fill, load against the circuits. Ink only.
+/// Key at talent, key to fill, and load against the circuits, on one line. Ink only.
 struct Readout: View {
     let plot: Plot
     let supply: LightMath.Supply
@@ -339,38 +377,20 @@ struct Readout: View {
     var body: some View {
         let load = LightMath.load(plot, supply: supply)
         let capacity = Double(max(1, LightMath.circuits(plot, supply: supply).count)) * supply.circuitAmps
-        HStack(spacing: 6) {
-            cell("Key") {
-                Text("\(Int(LightMath.keyLux(plot)).formatted()) lx")
-                    .contentTransition(.numericText())
-            }
-            cell("Ratio") { Text(LightMath.ratioText(plot)) }
-            cell("Load") {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(String(format: "%.1f of %.0f A", load.amps, capacity)).contentTransition(.numericText())
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Palette.p3)
-                            Capsule().fill(Palette.text).frame(width: geo.size.width * min(1, load.amps / capacity))
-                        }
-                    }
-                    .frame(height: 4)
-                }
-            }
+        let key = Int(LightMath.keyLux(plot))
+        HStack(spacing: 10) {
+            Text("\(key.formatted()) lx").contentTransition(.numericText())
+            Text(LightMath.ratioText(plot)).foregroundStyle(Palette.quiet)
+            Text(String(format: "%.1f/%.0f A", load.amps, capacity)).contentTransition(.numericText())
         }
+        .font(.lwData).foregroundStyle(Palette.text).lineLimit(1)
+        .padding(.horizontal, 10).frame(minHeight: 30)
+        .background(Palette.p1.opacity(0.9), in: RoundedRectangle(cornerRadius: Radius.chip))
+        .overlay(RoundedRectangle(cornerRadius: Radius.chip).strokeBorder(Palette.rule))
         .animation(.easeOut(duration: 0.4), value: load.amps)
         .allowsHitTesting(false)
-    }
-
-    private func cell<V: View>(_ title: String, @ViewBuilder _ value: () -> V) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Caps(title)
-            value().font(.lwReadout).foregroundStyle(Palette.text).lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 9).padding(.vertical, 6)
-        .background(Palette.p1.opacity(0.9), in: RoundedRectangle(cornerRadius: Radius.card))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Palette.rule))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Key \(key) lux, ratio \(LightMath.ratioText(plot)), load \(String(format: "%.1f", load.amps)) of \(Int(capacity)) amps")
     }
 }
 

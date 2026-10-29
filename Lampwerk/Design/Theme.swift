@@ -119,6 +119,13 @@ struct ActionButtonStyle: ButtonStyle {
     }
 }
 
+extension View {
+    /// On a phone on its side, keeps a sheet or list to a readable column instead of stretching edge to edge.
+    func readableWidth(_ width: CGFloat = 560) -> some View {
+        frame(maxWidth: width).frame(maxWidth: .infinity)
+    }
+}
+
 /// The mark and wordmark, from the outlined SVGs in the asset catalogue. Solid, never in gel.
 struct Lockup: View {
     var height: CGFloat = 22
