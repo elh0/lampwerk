@@ -22,6 +22,8 @@ struct EditorView: View {
     @State private var showingSpace = false
     /// Closed, the drawer shows setups and the lamp count; open, it adds the lamps and the inspector.
     @State private var drawerOpen = false
+    /// The drawer's height upright, so the plan can sit above it with the whole room in view.
+    @State private var drawerHeight: CGFloat = 62
     /// Compact height means an iPhone on its side: the drawer becomes a column on the right.
     @Environment(\.verticalSizeClass) private var verticalSize
 
@@ -47,8 +49,8 @@ struct EditorView: View {
             topBar(plot.wrappedValue)
             ZStack(alignment: wide ? .topTrailing : .bottom) {
                 plan(plot)
-                    // Keep the plan clear of the drawer: the closed bar in portrait, the open column on its side.
-                    .padding(.bottom, wide ? 0 : 62)
+                    // Keep the plan clear of the drawer: above it upright, beside it on its side.
+                    .padding(.bottom, wide ? 0 : drawerHeight)
                     .padding(.trailing, wide && drawerOpen ? 360 : 0)
                 drawer(plot, wide: wide)
             }
@@ -274,6 +276,7 @@ struct EditorView: View {
         .frame(maxHeight: wide && drawerOpen ? .infinity : nil, alignment: .top)
         .background(Palette.p1, in: shape)
         .overlay { shape.stroke(Palette.rule, lineWidth: 1) }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { drawerHeight = $0 }
         .padding(.top, wide && drawerOpen ? 8 : 0)
         .frame(maxHeight: .infinity, alignment: wide && drawerOpen ? .top : .bottom)
     }
