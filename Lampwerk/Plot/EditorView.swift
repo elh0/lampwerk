@@ -29,6 +29,10 @@ struct EditorView: View {
     @State private var toast: String?
     /// Sketch draws lamps by shape and aims them; Move drags.
     @State private var planMode: PlanMode = .sketch
+    /// Top down or 3D, and which way the 3D view is turned.
+    @State private var show3D = false
+    @State private var yaw = IsoProjection.defaultYaw
+    @State private var pitch = IsoProjection.defaultPitch
     @State private var showingSpace = false
     /// Closed, the drawer shows setups and the lamp count; open, it adds the lamps and the inspector.
     @State private var drawerOpen = false
@@ -83,21 +87,37 @@ struct EditorView: View {
     /// The plan with the live readout over it, undo and redo in thumb reach, and a line for whatever just happened.
     private func plan(_ plot: Binding<Plot>) -> some View {
         ZStack(alignment: .top) {
-            PlanCanvas(
-                plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, armed: armed,
-                drop: { id, at in drop(id, at: at, plot) },
-                more: { drawerOpen = true },
-                mode: planMode,
-                say: say
-            )
+            if show3D {
+                IsoCanvas(
+                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, yaw: $yaw, pitch: $pitch, armed: armed,
+                    drop: { id, at in drop(id, at: at, plot) },
+                    more: { drawerOpen = true }
+                )
+                .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.94)), removal: .opacity))
+            } else {
+                PlanCanvas(
+                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, armed: armed,
+                    drop: { id, at in drop(id, at: at, plot) },
+                    more: { drawerOpen = true },
+                    mode: planMode,
+                    say: say
+                )
+                .transition(.opacity)
+            }
             HStack(alignment: .top) {
                 Readout(plot: plot.wrappedValue, supply: store.supply)
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 8) {
-                    modeSwitch
-                    if zoom != 1 {
-                        Button("Fit") { withAnimation(.snappy) { zoom = 1 } }
-                            .buttonStyle(ActionButtonStyle())
+                    if !show3D { modeSwitch }
+                    if zoom != 1 || (show3D && (yaw != IsoProjection.defaultYaw || pitch != IsoProjection.defaultPitch)) {
+                        Button("Fit") {
+                            withAnimation(.snappy) {
+                                zoom = 1
+                                yaw = IsoProjection.defaultYaw
+                                pitch = IsoProjection.defaultPitch
+                            }
+                        }
+                        .buttonStyle(ActionButtonStyle())
                     }
                 }
             }
@@ -122,6 +142,8 @@ struct EditorView: View {
             }
             .padding(12)
         }
+        .overlay(alignment: .bottomTrailing) { viewSwitch.padding(12) }
+        .animation(.snappy(duration: 0.35), value: show3D)
         .animation(.snappy(duration: 0.2), value: toast)
         .animation(.snappy(duration: 0.2), value: armed?.id)
         .task(id: toast) {
@@ -146,6 +168,27 @@ struct EditorView: View {
     }
 
     private func say(_ line: String) { toast = line }
+
+    /// Top down or 3D, bottom right of the plan.
+    private var viewSwitch: some View {
+        HStack(spacing: 2) {
+            ForEach([false, true], id: \.self) { is3D in
+                Button {
+                    show3D = is3D
+                    zoom = 1
+                } label: {
+                    Text(is3D ? "3D" : "Top").font(.lwButton)
+                        .foregroundStyle(show3D == is3D ? Palette.p0 : Palette.quiet)
+                        .padding(.horizontal, 14).frame(minHeight: 40)
+                        .background(show3D == is3D ? Palette.gel : Color.clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Palette.p2, in: Capsule())
+        .overlay(Capsule().strokeBorder(Palette.ruleStrong))
+    }
 
     /// Sketch or Move, top right of the plan.
     private var modeSwitch: some View {
@@ -230,7 +273,9 @@ struct EditorView: View {
                 allPlots: {
                     showingSend = false
                     close()
-                }
+                },
+                yaw: yaw,
+                pitch: pitch
             )
             .readableWidth()
             .presentationDetents([.medium, .large])

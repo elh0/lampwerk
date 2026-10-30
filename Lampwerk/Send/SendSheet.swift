@@ -7,9 +7,13 @@ struct SendSheet: View {
     let supply: LightMath.Supply
     var backToPlan: () -> Void
     var allPlots: () -> Void
+    /// The 3D view's angle, for the 3D picture.
+    var yaw = IsoProjection.defaultYaw
+    var pitch = IsoProjection.defaultPitch
 
     @State private var pdf: URL?
     @State private var image: URL?
+    @State private var image3D: URL?
     @State private var preparing = true
 
     var body: some View {
@@ -38,7 +42,8 @@ struct SendSheet: View {
                     Caps("Send as").padding(.top, 18).padding(.bottom, 2)
                     Divider().overlay(Palette.rule)
                     option("Gaffer sheet", "A4 PDF: plan, gear list, heights and power.", url: pdf)
-                    option("Plan image", "The plan as a picture, good for WhatsApp.", url: image)
+                    option("Plan image", "The plan from above, good for WhatsApp.", url: image)
+                    option("3D picture", "The room in 3D, from the angle you left it at.", url: image3D)
                     textOption
                     liveLink
                 }
@@ -61,6 +66,7 @@ struct SendSheet: View {
             guard !Task.isCancelled else { return }
             pdf = Export.gafferSheetPDF(plot, supply: supply)
             image = Export.planImage(plot)
+            image3D = Export.isoImage(plot, yaw: yaw, pitch: pitch)
             preparing = false
         }
     }

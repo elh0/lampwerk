@@ -95,6 +95,8 @@ struct LampPop: View {
     let id: PlacedLamp.ID
     @Binding var tab: Tab
     var more: () -> Void
+    /// In 3D: raise and lower the head through stand heights.
+    var showHeight = false
 
     var body: some View {
         if let i = plot.items.firstIndex(where: { $0.id == id }), let lamp = plot.items[i].lamp {
@@ -108,6 +110,12 @@ struct LampPop: View {
                         button(plot.isOn(item) ? "Off" : "On") {
                             if plot.isOn(item) { plot.items[i].offIn.insert(plot.shot) } else { plot.items[i].offIn.remove(plot.shot) }
                         }
+                    }
+                    if showHeight && lamp.isLight {
+                        let z = IsoCanvas.height(item)
+                        button("▼") { if let h = IsoCanvas.stands.last(where: { $0 < z - 0.01 }) { plot.items[i].height = h } }
+                        Text(String(format: "%.1f m", z)).font(.lwData).foregroundStyle(Palette.text).padding(.horizontal, 2)
+                        button("▲") { if let h = IsoCanvas.stands.first(where: { $0 > z + 0.01 }) { plot.items[i].height = h } }
                     }
                     button("Remove", danger: true) { plot.items.remove(at: i) }
                     button("More") { more() }

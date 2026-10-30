@@ -32,6 +32,20 @@ enum Export {
         }
     }
 
+    /// The room in 3D, from the angle it was left at in the editor.
+    static func isoImage(_ plot: Plot, yaw: Double, pitch: Double) -> URL? {
+        let url = folder().appending(path: "\(fileName(plot))-3d.png")
+        let renderer = ImageRenderer(content: IsoImage(plot: plot, yaw: yaw, pitch: pitch))
+        renderer.scale = 2
+        guard let data = renderer.uiImage?.pngData() else { return nil }
+        do {
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
     /// For a quick WhatsApp: one line per head, numbered as on the plan.
     static func text(_ plot: Plot, supply: LightMath.Supply) -> String {
         var lines = ["\(plot.name) · \(plot.items.count) lamps"]
@@ -65,6 +79,34 @@ enum Export {
 }
 
 /// The plan on its own, dark, sized for a phone screen.
+struct IsoImage: View {
+    let plot: Plot
+    let yaw: Double
+    let pitch: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Lockup(height: 22)
+                Spacer()
+                Text(plot.name).font(.lwTitle).foregroundStyle(Palette.text)
+            }
+            IsoCanvas(
+                plot: .constant(plot), selected: .constant(nil), zoom: .constant(1), popTab: .constant(.mods),
+                yaw: .constant(yaw), pitch: .constant(pitch), drop: { _, _ in }, more: {}, showHandles: false
+            )
+            HStack {
+                Text("\(plot.items.count) lamps").font(.lwData).foregroundStyle(Palette.quiet)
+                Spacer()
+                Text(String(format: "%.1f × %.1f m", plot.roomWidth, plot.roomDepth)).font(.lwData).foregroundStyle(Palette.quiet)
+            }
+        }
+        .padding(28)
+        .frame(width: 810, height: 675)
+        .background(Palette.p0)
+    }
+}
+
 struct PlanImage: View {
     let plot: Plot
 
