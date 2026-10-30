@@ -1,10 +1,18 @@
 import SwiftUI
 
-/// The top-down plan. Drag a lamp, the talent or the camera to move it, drag the handle to aim it, tap to select, pinch to zoom.
+/// The top-down plan. Drag a lamp, the talent or the camera to move it, drag the handle to aim it, pinch to zoom.
+/// Tap a lamp for its card; tap it again to swap it; tap anywhere else to let go, and what you changed stays.
 struct PlanCanvas: View {
     @Binding var plot: Plot
     @Binding var selected: PlacedLamp.ID?
     @Binding var zoom: CGFloat
+    @Binding var popTab: LampPop.Tab
+    /// A quick lamp waiting to be dropped with the next tap on empty floor.
+    var armed: Lamp?
+    /// Puts a lamp (by library id) down at a point on the plan.
+    var drop: (String, Point2) -> Void
+    /// Opens the full settings for the picked lamp.
+    var more: () -> Void
 
     @State private var drag: DragState?
     @GestureState private var pinch: CGFloat = 1
@@ -29,6 +37,21 @@ struct PlanCanvas: View {
             }
             .contentShape(Rectangle())
             .gesture(dragGesture(v))
+            .dropDestination(for: String.self) { ids, location in
+                guard let id = ids.first, LampLibrary.lamp(id) != nil else { return false }
+                drop(id, v.metres(location))
+                return true
+            }
+            .overlay(alignment: .topLeading) {
+                if let id = selected, drag?.moved != true, let item = plot.items.first(where: { $0.id == id }) {
+                    let c = v.point(item.position)
+                    LampPop(plot: $plot, id: id, tab: $popTab, more: more)
+                        .alignmentGuide(.leading) { d in d.width / 2 }
+                        .alignmentGuide(.top) { d in d.height + 30 }
+                        .offset(x: min(max(c.x, 170), max(170, geo.size.width - 170)), y: max(c.y, 140))
+                        .transition(.opacity)
+                }
+            }
             .simultaneousGesture(
                 MagnifyGesture()
                     .updating($pinch) { value, state, _ in state = value.magnification }
@@ -123,12 +146,17 @@ struct PlanCanvas: View {
                     break
                 }
             }
-            .onEnded { _ in
+            .onEnded { value in
                 if let d = drag, !d.moved {
                     switch d.target {
-                    case .lamp(let id): selected = selected == id ? nil : id
-                    case .none: selected = nil
-                    default: break
+                    case .lamp(let id):
+                        if selected == id { popTab = popTab == .swap ? .mods : .swap } else { selected = id; popTab = .mods }
+                    case .none:
+                        if let armed { drop(armed.id, v.metres(value.startLocation)) } else { selected = nil }
+                    case .talent, .camera:
+                        selected = nil
+                    case .aim:
+                        break
                     }
                 }
                 drag = nil

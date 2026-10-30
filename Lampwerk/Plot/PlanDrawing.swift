@@ -137,27 +137,34 @@ enum PlanDrawing {
         let w = lamp.width * s, h = lamp.depth * s
         var body = Path()
         var dotX: CGFloat = 0
+        /// Where the light leaves the head, for drawing its modifier.
+        var front: CGFloat = 0
 
         switch lamp.kind {
         case .panel:
             body.addRect(CGRect(x: -h / 2, y: -w / 2, width: h, height: w))
             body.move(to: CGPoint(x: h / 2, y: -w / 2)); body.addLine(to: CGPoint(x: h / 2, y: w / 2))
+            front = h / 2
         case .point:
             body.addRect(CGRect(x: -w / 2, y: -h / 2, width: w * 0.62, height: h))
             body.move(to: CGPoint(x: w * 0.12, y: -h * 0.42))
             body.addLine(to: CGPoint(x: w / 2, y: -h * 0.62)); body.addLine(to: CGPoint(x: w / 2, y: h * 0.62))
             body.addLine(to: CGPoint(x: w * 0.12, y: h * 0.42)); body.closeSubpath()
             dotX = -w * 0.2
+            front = w / 2
         case .fresnel:
             body.addRect(CGRect(x: -w / 2, y: -h / 2, width: w * 0.8, height: h))
             body.move(to: CGPoint(x: w * 0.3, y: -h * 0.5)); body.addLine(to: CGPoint(x: w * 0.52, y: -h * 0.74))
             body.move(to: CGPoint(x: w * 0.3, y: h * 0.5)); body.addLine(to: CGPoint(x: w * 0.52, y: h * 0.74))
             dotX = -w * 0.1
+            front = w * 0.3
         case .tube:
             body.addRect(CGRect(x: -0.05 * s, y: -w / 2, width: 0.1 * s, height: w))
+            front = 0.05 * s
         case .practical:
             let r = max(w / 2, 0.12 * s)
             body.addEllipse(in: CGRect(x: -r, y: -r, width: r * 2, height: r * 2))
+            front = r
         case .bounce, .diff, .flag:
             // A frame seen edge-on: a bar along its width.
             body.addRect(CGRect(x: -w / 2, y: -h / 2, width: w, height: max(h, 0.06 * s)))
@@ -170,6 +177,7 @@ enum PlanDrawing {
         } else {
             g.fill(body, with: .color(ink.bg))
             g.stroke(body, with: .color(line), style: stroke)
+            drawModifier(item.modifier, front: front, across: lamp.kind == .panel || lamp.kind == .tube ? w : 0.6 * s, scale: s, g, line, stroke, ink)
             let dr = (lamp.kind == .tube ? 0.07 : min(0.09, max(0.06, lamp.depth * 0.22))) * s
             let dot = Path(ellipseIn: CGRect(x: dotX - dr, y: -dr, width: dr * 2, height: dr * 2))
             if on {
@@ -183,6 +191,57 @@ enum PlanDrawing {
         if selected {
             let r = max(0.34, lamp.width * 0.66) * s
             g.stroke(Path(ellipseIn: CGRect(x: dotX - r, y: -r, width: r * 2, height: r * 2)), with: .color(ink.selection), style: StrokeStyle(lineWidth: 1.2))
+        }
+    }
+
+    /// The modifier in front of a head, so the plan shows a softbox as a softbox. +x is where the head points.
+    static func drawModifier(_ m: String, front f: CGFloat, across: CGFloat, scale s: CGFloat, _ g: GraphicsContext, _ line: Color, _ stroke: StrokeStyle, _ ink: Ink) {
+        var p = Path()
+        switch m {
+        case "Softbox", "Chimera, medium":
+            let d = 0.34 * s, half = max(across / 2 + 0.1 * s, 0.4 * s)
+            p.move(to: CGPoint(x: f, y: -0.14 * s)); p.addLine(to: CGPoint(x: f + d, y: -half))
+            p.addLine(to: CGPoint(x: f + d, y: half)); p.addLine(to: CGPoint(x: f, y: 0.14 * s)); p.closeSubpath()
+            g.fill(p, with: .color(ink.bg))
+            g.stroke(p, with: .color(line), style: stroke)
+            var face = Path()
+            face.move(to: CGPoint(x: f + d, y: -half)); face.addLine(to: CGPoint(x: f + d, y: half))
+            g.stroke(face, with: .color(line), style: StrokeStyle(lineWidth: stroke.lineWidth * 2.5))
+        case "Dome M":
+            p.addArc(center: CGPoint(x: f, y: 0), radius: 0.22 * s, startAngle: .degrees(-90), endAngle: .degrees(90), clockwise: false)
+            p.closeSubpath()
+            g.fill(p, with: .color(ink.bg))
+            g.stroke(p, with: .color(line), style: stroke)
+        case "Lantern":
+            let r = 0.28 * s, c = f + r
+            p.addEllipse(in: CGRect(x: c - r, y: -r, width: r * 2, height: r * 2))
+            g.fill(p, with: .color(ink.bg))
+            g.stroke(p, with: .color(line), style: stroke)
+            var ribs = Path()
+            for k in [-0.5, 0.0, 0.5] {
+                let x = c + r * k, y = r * sqrt(1 - k * k)
+                ribs.move(to: CGPoint(x: x, y: -y)); ribs.addLine(to: CGPoint(x: x, y: y))
+            }
+            g.stroke(ribs, with: .color(ink.quiet), style: StrokeStyle(lineWidth: stroke.lineWidth * 0.6))
+        case "Shade":
+            p.addEllipse(in: CGRect(x: -f - 0.07 * s, y: -f - 0.07 * s, width: (f + 0.07 * s) * 2, height: (f + 0.07 * s) * 2))
+            g.stroke(p, with: .color(line), style: StrokeStyle(lineWidth: stroke.lineWidth * 2))
+        case "Fresnel lens":
+            p.move(to: CGPoint(x: f, y: -0.17 * s))
+            p.addQuadCurve(to: CGPoint(x: f, y: 0.17 * s), control: CGPoint(x: f + 0.14 * s, y: 0))
+            g.stroke(p, with: .color(line), style: StrokeStyle(lineWidth: stroke.lineWidth * 2))
+        case "Snapgrid 40°", "Honeycrate", "8x8 full grid":
+            let half = across / 2, d = 0.1 * s
+            p.addRect(CGRect(x: f, y: -half, width: d, height: half * 2))
+            var y = -half + 0.08 * s
+            while y < half { p.move(to: CGPoint(x: f, y: y)); p.addLine(to: CGPoint(x: f + d, y: y)); y += 0.08 * s }
+            g.stroke(p, with: .color(line), style: StrokeStyle(lineWidth: stroke.lineWidth * 0.8))
+        case "Snoot":
+            p.addRect(CGRect(x: f, y: -0.07 * s, width: 0.3 * s, height: 0.14 * s))
+            g.fill(p, with: .color(ink.bg))
+            g.stroke(p, with: .color(line), style: stroke)
+        default:
+            break
         }
     }
 

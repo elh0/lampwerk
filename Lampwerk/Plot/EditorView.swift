@@ -17,8 +17,16 @@ struct EditorView: View {
     @State private var sendAfterAR = false
     /// The name being typed in the rename box; nil when it's closed.
     @State private var renaming: String?
-    /// The lamps from the last Remove all, kept so it can be undone.
-    @State private var cleared: [PlacedLamp]?
+    /// Every change to the plot, for undo and redo.
+    @State private var history = PlotHistory()
+    /// Set while undo or redo puts an older plot back, so that doesn't count as a new change.
+    @State private var restoring = false
+    /// A quick lamp waiting for a tap on the plan.
+    @State private var armed: Lamp?
+    @State private var popTab: LampPop.Tab = .mods
+    /// Where the history stood when a lamp was picked, to tell whether letting go of it saved anything.
+    @State private var pickMark = 0
+    @State private var toast: String?
     @State private var showingSpace = false
     /// Closed, the drawer shows setups and the lamp count; open, it adds the lamps and the inspector.
     @State private var drawerOpen = false
@@ -36,7 +44,12 @@ struct EditorView: View {
             }
         }
         .onAppear { plot = store.plots.first { $0.id == plotID } }
-        .onChange(of: plot) { _, new in if let new { store.update(new) } }
+        .onChange(of: plot) { old, new in
+            guard let new else { return }
+            store.update(new)
+            if restoring { restoring = false } else if let old { history.record(old) }
+            if let id = selected, !new.items.contains(where: { $0.id == id }) { selected = nil }
+        }
     }
 
     private func editor(_ plot: Binding<Plot>) -> some View {
@@ -58,13 +71,21 @@ struct EditorView: View {
         .background(Palette.p0)
         .animation(.snappy(duration: 0.25), value: drawerOpen)
         .animation(.snappy(duration: 0.25), value: selected)
-        .onChange(of: selected) { _, new in if new != nil { drawerOpen = true } }
+        .onChange(of: selected) { old, new in
+            if new != nil, old == nil { pickMark = history.count }
+            if old != nil, new == nil, history.count != pickMark, self.plot?.items.contains(where: { $0.id == old }) == true { say("Saved") }
+            if new != nil { armed = nil }
+        }
     }
 
-    /// The plan with the live readout over it, and the undo bar after Remove all.
+    /// The plan with the live readout over it, undo and redo in thumb reach, and a line for whatever just happened.
     private func plan(_ plot: Binding<Plot>) -> some View {
         ZStack(alignment: .top) {
-            PlanCanvas(plot: plot, selected: $selected, zoom: $zoom)
+            PlanCanvas(
+                plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, armed: armed,
+                drop: { id, at in drop(id, at: at, plot) },
+                more: { drawerOpen = true }
+            )
             HStack(alignment: .top) {
                 Readout(plot: plot.wrappedValue, supply: store.supply)
                 Spacer(minLength: 8)
@@ -74,32 +95,58 @@ struct EditorView: View {
                 }
             }
             .padding(.horizontal, 12).padding(.top, 8)
+            if let line = armed.map({ "Tap the plan to drop a \($0.shortName)" }) ?? toast {
+                Text(line)
+                    .font(.lwButton).foregroundStyle(armed == nil ? Palette.text : Palette.p0)
+                    .padding(.horizontal, 12).frame(minHeight: 34)
+                    .background(armed == nil ? Palette.p2 : Palette.gel, in: RoundedRectangle(cornerRadius: Radius.card))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Palette.rule))
+                    .padding(.top, 48)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
         }
         .frame(maxHeight: .infinity)
         .clipped()
-        .overlay(alignment: .bottom) {
-            if let cleared {
-                HStack {
-                    Text("Removed \(cleared.count) lamps").font(.lwBody).foregroundStyle(Palette.text)
-                    Spacer()
-                    Button("Undo") {
-                        plot.wrappedValue.items = cleared
-                        self.cleared = nil
-                    }
-                    .buttonStyle(ActionButtonStyle(primary: true))
-                }
-                .padding(.horizontal, 14).frame(minHeight: 48)
-                .background(Palette.p2, in: RoundedRectangle(cornerRadius: Radius.panel))
-                .overlay(RoundedRectangle(cornerRadius: Radius.panel).strokeBorder(Palette.rule))
-                .padding(12)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .task {
-                    try? await Task.sleep(for: .seconds(6))
-                    withAnimation { self.cleared = nil }
-                }
+        .overlay(alignment: .bottomLeading) {
+            HStack(spacing: 8) {
+                roundButton("arrow.uturn.backward", "Undo", enabled: history.canUndo) { step(back: true, plot) }
+                roundButton("arrow.uturn.forward", "Redo", enabled: history.canRedo) { step(back: false, plot) }
             }
+            .padding(12)
         }
-        .animation(.snappy(duration: 0.25), value: cleared?.count)
+        .animation(.snappy(duration: 0.2), value: toast)
+        .animation(.snappy(duration: 0.2), value: armed?.id)
+        .task(id: toast) {
+            guard toast != nil else { return }
+            try? await Task.sleep(for: .seconds(2))
+            toast = nil
+        }
+    }
+
+    private func roundButton(_ icon: String, _ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 17, weight: .medium))
+                .foregroundStyle(Palette.text)
+                .frame(width: 46, height: 46)
+                .background(Palette.p2, in: Circle())
+                .overlay(Circle().strokeBorder(Palette.ruleStrong))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .accessibilityLabel(label)
+    }
+
+    private func say(_ line: String) { toast = line }
+
+    private func step(back: Bool, _ plot: Binding<Plot>) {
+        let current = plot.wrappedValue
+        guard let next = back ? history.undo(current) : history.redo(current) else { return }
+        restoring = next != current
+        selected = nil
+        plot.wrappedValue = next
+        say(back ? "Undone" : "Redone")
     }
 
     /// The editor's sheets and covers, shared by both layouts.
@@ -237,6 +284,8 @@ struct EditorView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(drawerOpen ? "Close lamps" : "Open lamps")
+                QuickRow(picked: picked(plot.wrappedValue), armed: armed) { lamp in quick(lamp, plot) }
+                    .padding(.bottom, 8)
                 HStack(spacing: 4) {
                     ForEach(Shot.allCases, id: \.self) { shot in
                         Chip(title: shot.title, selected: plot.wrappedValue.shot == shot) {
@@ -264,7 +313,7 @@ struct EditorView: View {
                 } else {
                     rail(plot)
                     if selected == nil {
-                        hint("Tap a lamp to change it. Drag it on the plan to move it.")
+                        hint("Tap a lamp on the plan to change it, or here for all its settings.")
                     }
                     inspector(plot)
                 }
@@ -351,11 +400,48 @@ struct EditorView: View {
         }
     }
 
-    /// Empties the plan, with a few seconds to undo.
+    /// Empties the plan. Undo brings it all back.
     private func clearAll(_ plot: Binding<Plot>) {
-        cleared = plot.wrappedValue.items
+        let n = plot.wrappedValue.items.count
         selected = nil
         plot.wrappedValue.items = []
+        say("Removed \(n) lamps · Undo bottom left")
+    }
+
+    private func picked(_ plot: Plot) -> Lamp? {
+        plot.items.first { $0.id == selected }?.lamp
+    }
+
+    /// A quick lamp: swaps the picked lamp's head, or waits for a tap on the plan. Tap it again to put it back.
+    private func quick(_ lamp: Lamp, _ plot: Binding<Plot>) {
+        if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
+            if plot.wrappedValue.items[i].lampID != lamp.id {
+                plot.wrappedValue.items[i].swapHead(to: lamp)
+                say("Swapped to \(lamp.shortName)")
+            }
+        } else {
+            armed = armed?.id == lamp.id ? nil : lamp
+        }
+    }
+
+    /// Puts a lamp down where you tapped or let go, on the 25 cm grid and clear of the walls, aimed at the talent.
+    private func drop(_ id: String, at p: Point2, _ plot: Binding<Plot>) {
+        guard let lamp = LampLibrary.lamp(id) else { return }
+        let r = plot.wrappedValue
+        let g = { (v: Double) in (v * 4).rounded() / 4 }
+        let at = Point2(x: min(r.roomWidth - 0.3, max(0.3, g(p.x))), y: min(r.roomDepth - 0.3, max(0.3, g(p.y))))
+        plot.wrappedValue.items.append(newItem(lamp, at: at, in: r))
+        armed = nil
+        say("Dropped \(lamp.shortName)")
+    }
+
+    private func newItem(_ lamp: Lamp, at p: Point2, in plot: Plot) -> PlacedLamp {
+        var item = Starter.place(lamp.id, p.x, p.y, lamp.isLight ? .key : .diff, nil, nil, [])
+        let aim = p.bearing(to: plot.talent)
+        item.angle = lamp.isGrip ? aim + 90 : aim
+        if plot.items.contains(where: { $0.role == .key }) && lamp.isLight { item.role = .fill }
+        if let m = LastModifier.get(lamp.id), lamp.modifiers.contains(m) { item.modifier = m }
+        return item
     }
 
     /// Drops a new lamp up and to the left of the talent, aimed at them, and selects it.
@@ -363,10 +449,7 @@ struct EditorView: View {
         let t = plot.wrappedValue.talent
         let step = Double(plot.wrappedValue.items.count % 5) * 0.4
         let x = max(0.3, t.x - 1.6 + step), y = max(0.3, t.y - 1.6)
-        var item = Starter.place(lamp.id, x, y, lamp.isLight ? .key : .fill, nil, nil, [])
-        let aim = Point2(x: x, y: y).bearing(to: t)
-        item.angle = lamp.isGrip ? aim + 90 : aim
-        if plot.wrappedValue.items.contains(where: { $0.role == .key }) && lamp.isLight { item.role = .fill }
+        let item = newItem(lamp, at: Point2(x: x, y: y), in: plot.wrappedValue)
         plot.wrappedValue.items.append(item)
         selected = item.id
     }
