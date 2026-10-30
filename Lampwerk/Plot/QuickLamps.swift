@@ -42,6 +42,7 @@ extension PlacedLamp {
     mutating func swapHead(to lamp: Lamp) {
         let wasGrip = self.lamp?.isGrip ?? false
         lampID = lamp.id
+        Sketch.Shape.remember(lamp)
         if !lamp.modifiers.contains(modifier) { modifier = LastModifier.get(lamp.id) ?? lamp.modifiers[0] }
         if let range = lamp.cct { cct = min(range.upperBound, max(range.lowerBound, cct)) }
         if lamp.isGrip != wasGrip {

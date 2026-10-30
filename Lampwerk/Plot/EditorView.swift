@@ -27,6 +27,8 @@ struct EditorView: View {
     /// Where the history stood when a lamp was picked, to tell whether letting go of it saved anything.
     @State private var pickMark = 0
     @State private var toast: String?
+    /// Sketch draws lamps by shape and aims them; Move drags.
+    @State private var planMode: PlanMode = .sketch
     @State private var showingSpace = false
     /// Closed, the drawer shows setups and the lamp count; open, it adds the lamps and the inspector.
     @State private var drawerOpen = false
@@ -84,14 +86,19 @@ struct EditorView: View {
             PlanCanvas(
                 plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, armed: armed,
                 drop: { id, at in drop(id, at: at, plot) },
-                more: { drawerOpen = true }
+                more: { drawerOpen = true },
+                mode: planMode,
+                say: say
             )
             HStack(alignment: .top) {
                 Readout(plot: plot.wrappedValue, supply: store.supply)
                 Spacer(minLength: 8)
-                if zoom != 1 {
-                    Button("Fit") { withAnimation(.snappy) { zoom = 1 } }
-                        .buttonStyle(ActionButtonStyle())
+                VStack(alignment: .trailing, spacing: 8) {
+                    modeSwitch
+                    if zoom != 1 {
+                        Button("Fit") { withAnimation(.snappy) { zoom = 1 } }
+                            .buttonStyle(ActionButtonStyle())
+                    }
                 }
             }
             .padding(.horizontal, 12).padding(.top, 8)
@@ -139,6 +146,24 @@ struct EditorView: View {
     }
 
     private func say(_ line: String) { toast = line }
+
+    /// Sketch or Move, top right of the plan.
+    private var modeSwitch: some View {
+        HStack(spacing: 2) {
+            ForEach([PlanMode.sketch, .move], id: \.self) { mode in
+                Button { planMode = mode } label: {
+                    Text(mode == .sketch ? "Sketch" : "Move").font(.lwButton)
+                        .foregroundStyle(planMode == mode ? Palette.p0 : Palette.quiet)
+                        .padding(.horizontal, 14).frame(minHeight: 36)
+                        .background(planMode == mode ? Palette.gel : Color.clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Palette.p2, in: Capsule())
+        .overlay(Capsule().strokeBorder(Palette.ruleStrong))
+    }
 
     private func step(back: Bool, _ plot: Binding<Plot>) {
         let current = plot.wrappedValue
@@ -431,6 +456,7 @@ struct EditorView: View {
         let g = { (v: Double) in (v * 4).rounded() / 4 }
         let at = Point2(x: min(r.roomWidth - 0.3, max(0.3, g(p.x))), y: min(r.roomDepth - 0.3, max(0.3, g(p.y))))
         plot.wrappedValue.items.append(newItem(lamp, at: at, in: r))
+        Sketch.Shape.remember(lamp)
         armed = nil
         say("Dropped \(lamp.shortName)")
     }

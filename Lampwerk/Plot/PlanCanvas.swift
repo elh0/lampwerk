@@ -13,11 +13,17 @@ struct PlanCanvas: View {
     var drop: (String, Point2) -> Void
     /// Opens the full settings for the picked lamp.
     var more: () -> Void
+    var mode: PlanMode = .move
+    /// A line for whatever just happened.
+    var say: (String) -> Void = { _ in }
+
+    /// The stroke being drawn in Sketch, in metres.
+    @State private var stroke: [Point2] = []
 
     @State private var drag: DragState?
     @GestureState private var pinch: CGFloat = 1
 
-    private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, none }
+    private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, none, sketch(PlacedLamp.ID?) }
 
     private struct DragState {
         var target: Target
@@ -34,6 +40,11 @@ struct PlanCanvas: View {
             Canvas { ctx, _ in
                 PlanDrawing.draw(plot, in: ctx, viewport: v, options: .init(selected: selected))
                 drawSelection(ctx, v)
+                if stroke.count > 1 {
+                    var path = Path()
+                    path.addLines(stroke.map { v.point($0) })
+                    ctx.stroke(path, with: .color(Palette.gel), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                }
             }
             .contentShape(Rectangle())
             .gesture(dragGesture(v))
@@ -52,6 +63,22 @@ struct PlanCanvas: View {
                         .transition(.opacity)
                 }
             }
+            .overlay(alignment: .topLeading) {
+                // While you draw, what the stroke will become before you lift your finger.
+                if let last = stroke.last {
+                    let p = v.point(last)
+                    Text(reading.label(from: strokeFrom) ?? "Keep going: close the shape")
+                        .font(.lwButton)
+                        .foregroundStyle(reading.label(from: strokeFrom) == nil ? Palette.quiet : Palette.p0)
+                        .padding(.horizontal, 10).frame(minHeight: 30)
+                        .background(reading.label(from: strokeFrom) == nil ? Palette.p2 : Palette.gel, in: RoundedRectangle(cornerRadius: Radius.card))
+                        .fixedSize()
+                        .alignmentGuide(.leading) { d in d.width / 2 }
+                        .alignmentGuide(.top) { d in d.height + 34 }
+                        .offset(x: min(max(p.x, 90), max(90, geo.size.width - 90)), y: p.y)
+                        .allowsHitTesting(false)
+                }
+            }
             .simultaneousGesture(
                 MagnifyGesture()
                     .updating($pinch) { value, state, _ in state = value.magnification }
@@ -59,6 +86,32 @@ struct PlanCanvas: View {
             )
             .accessibilityLabel("Lighting plan. Drag lamps, the talent or the camera to move, drag the handle to aim, pinch to zoom.")
         }
+    }
+
+    private var strokeFrom: PlacedLamp? {
+        if let d = drag, case .sketch(let id?) = d.target { return plot.items.first { $0.id == id } }
+        return nil
+    }
+
+    private var reading: Sketch.Reading { Sketch.read(stroke, from: strokeFrom, talent: plot.talent) }
+
+    /// A finished stroke: aim the lamp it came out of, or turn the shape into a lamp.
+    private func finishSketch() {
+        let from = strokeFrom
+        switch reading {
+        case .tap:
+            break
+        case .aim(let a):
+            guard let from, let i = plot.items.firstIndex(where: { $0.id == from.id }) else { break }
+            let aim = a ?? from.position.bearing(to: plot.talent)
+            plot.items[i].angle = (from.lamp?.isGrip ?? false) ? aim + 90 : aim
+            say("Aimed \(from.lamp?.shortName ?? "it")" + (a == nil ? " at talent" : ""))
+        case .shape(let shape, let centre):
+            drop(shape.lamp.id, centre)
+        case .unclear:
+            say("Didn't catch that. Try a circle, triangle, box or line")
+        }
+        stroke = []
     }
 
     /// The aim handle and the measured line to the talent for the selected lamp.
@@ -109,8 +162,12 @@ struct PlanCanvas: View {
                 let p = v.metres(value.location)
                 if drag == nil {
                     let start = v.metres(value.startLocation)
-                    let target = hitTest(start, v)
+                    var target = hitTest(start, v)
                     var offset = Point2(x: 0, y: 0)
+                    if mode == .sketch {
+                        if case .lamp(let id) = target { target = .sketch(id) }
+                        if case .none = target { target = .sketch(nil) }
+                    }
                     switch target {
                     case .lamp(let id):
                         if let item = plot.items.first(where: { $0.id == id }) {
@@ -142,16 +199,20 @@ struct PlanCanvas: View {
                     plot.talent = inRoom(Point2(x: p.x + d.offset.x, y: p.y + d.offset.y))
                 case .camera:
                     plot.camera = inRoom(Point2(x: p.x + d.offset.x, y: p.y + d.offset.y))
+                case .sketch:
+                    if stroke.isEmpty { stroke = [v.metres(value.startLocation)] }
+                    stroke.append(p)
                 case .none:
                     break
                 }
             }
             .onEnded { value in
+                if let d = drag, d.moved, case .sketch = d.target { finishSketch() }
                 if let d = drag, !d.moved {
                     switch d.target {
-                    case .lamp(let id):
+                    case .lamp(let id), .sketch(let id?):
                         if selected == id { popTab = popTab == .swap ? .mods : .swap } else { selected = id; popTab = .mods }
-                    case .none:
+                    case .none, .sketch(.none):
                         if let armed { drop(armed.id, v.metres(value.startLocation)) } else { selected = nil }
                     case .talent, .camera:
                         selected = nil
@@ -160,6 +221,7 @@ struct PlanCanvas: View {
                     }
                 }
                 drag = nil
+                stroke = []
             }
     }
 }
