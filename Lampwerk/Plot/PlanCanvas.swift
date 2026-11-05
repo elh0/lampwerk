@@ -13,6 +13,8 @@ struct PlanCanvas: View {
     var change: () -> Void = {}
     /// Lamps boxed together by dragging across empty floor; the editor's Delete takes them all.
     @Binding var group: Set<PlacedLamp.ID>
+    /// How far the plan has been dragged from centre. One finger on empty floor pans; press and hold, then drag, boxes.
+    @Binding var pan: CGSize
     /// A quick lamp waiting to be dropped with the next tap on empty floor.
     var armed: Lamp?
     /// Puts a lamp (by library id) down at a point on the plan.
@@ -30,6 +32,8 @@ struct PlanCanvas: View {
 
     @State private var drag: DragState?
     @State private var hold: Task<Void, Never>?
+    @State private var boxHold: Task<Void, Never>?
+    @State private var livePan: CGSize = .zero
     /// Lamps boxed together by dragging across empty floor, plus the talent and camera if the box took them in.
     @State private var groupTalent = false
     @State private var groupCamera = false
@@ -51,6 +55,8 @@ struct PlanCanvas: View {
         var startTalent = Point2(x: 0, y: 0)
         var startCamera = Point2(x: 0, y: 0)
         var from = Point2(x: 0, y: 0)
+        /// A press held still on empty floor turns the drag into a box.
+        var boxing = false
         /// A press and hold removed the lamp, so letting go does nothing more.
         var held = false
     }
@@ -61,7 +67,8 @@ struct PlanCanvas: View {
     var body: some View {
         GeometryReader { geo in
             // Pinching never goes past the zoom limits mid-gesture, so the plan can't shrink to nothing.
-            let v = drag?.locked ?? PlanViewport.fit(plot, in: geo.size, zoom: min(4, max(0.6, zoom * pinch)))
+            let v = drag?.locked ?? PlanViewport.fit(plot, in: geo.size, zoom: min(4, max(0.6, zoom * pinch)),
+                                                          pan: CGSize(width: pan.width + livePan.width, height: pan.height + livePan.height))
             Canvas { ctx, size in
                 drawOutsideGrid(ctx, v, size)
                 PlanDrawing.draw(plot, in: ctx, viewport: v, options: .init(selected: selected))
@@ -227,11 +234,12 @@ struct PlanCanvas: View {
                     }
                     switch target {
                     case .lamp(let id), .sketch(let id?): if group.isEmpty { holdToRemove(id) }
+                    case .none where mode == .move && armed == nil: holdToBox()
                     default: break
                     }
                 }
                 guard var d = drag, !d.held else { return }
-                if !d.moved, hypot(value.translation.width, value.translation.height) > 4 { d.moved = true; hold?.cancel() }
+                if !d.moved, hypot(value.translation.width, value.translation.height) > 4 { d.moved = true; hold?.cancel(); boxHold?.cancel() }
                 drag = d
                 guard d.moved else { return }
 
@@ -292,12 +300,18 @@ struct PlanCanvas: View {
                     if stroke.isEmpty { stroke = [v.metres(value.startLocation)] }
                     stroke.append(p)
                 case .none:
-                    // Drag across empty floor to box lamps together.
-                    if mode == .move, armed == nil { lasso = (v.metres(value.startLocation), p) }
+                    // Held first: box lamps together. Straight away: move around the plan.
+                    if d.boxing { lasso = ((d.locked ?? v).metres(value.startLocation), (d.locked ?? v).metres(value.location)) }
+                    else if mode == .move { livePan = value.translation }
                 }
             }
             .onEnded { value in
                 hold?.cancel()
+                boxHold?.cancel()
+                if livePan != .zero {
+                    pan = CGSize(width: pan.width + livePan.width, height: pan.height + livePan.height)
+                    livePan = .zero
+                }
                 if let box = lasso { finishLasso(box) }
                 if let d = drag, d.moved, case .sketch = d.target { finishSketch() }
                 if let d = drag, !d.moved, !d.held {
@@ -430,6 +444,19 @@ struct PlanCanvas: View {
         for p in rings {
             let c = v.point(p), r: CGFloat = 18
             ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(Palette.gel), lineWidth: 1.2)
+        }
+    }
+
+    /// Hold still on empty floor for a moment, then drag, to box lamps together. The plan holds still meanwhile.
+    private func holdToBox() {
+        boxHold?.cancel()
+        boxHold = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, var d = drag, !d.moved else { return }
+            d.boxing = true
+            drag = d
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            say("Drag to box lamps together")
         }
     }
 }

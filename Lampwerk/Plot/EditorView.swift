@@ -17,6 +17,8 @@ struct EditorView: View {
     @State private var group: Set<PlacedLamp.ID> = []
     /// The lamp list is open to change the picked lamp's head.
     @State private var changingLamp = false
+    /// How far the top-down plan has been dragged around.
+    @State private var pan: CGSize = .zero
     @State private var zoom: CGFloat = 1
     @State private var showingAR = false
     @State private var confirmingAR = false
@@ -111,7 +113,7 @@ struct EditorView: View {
                 .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.94)), removal: .opacity))
             } else {
                 PlanCanvas(
-                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, cardOpen: $cardOpen, change: { changingLamp = true }, group: $group, armed: armed,
+                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, cardOpen: $cardOpen, change: { changingLamp = true }, group: $group, pan: $pan, armed: armed,
                     drop: { id, at in drop(id, at: at, plot) },
                     more: { drawerOpen = true },
                     mode: planMode,
@@ -125,10 +127,11 @@ struct EditorView: View {
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 8) {
                     if !show3D { modeSwitch }
-                    if zoom != 1 || (show3D && (yaw != IsoProjection.defaultYaw || pitch != IsoProjection.defaultPitch)) {
+                    if zoom != 1 || (!show3D && pan != .zero) || (show3D && (yaw != IsoProjection.defaultYaw || pitch != IsoProjection.defaultPitch)) {
                         Button("Fit") {
                             withAnimation(.snappy) {
                                 zoom = 1
+                                pan = .zero
                                 yaw = IsoProjection.defaultYaw
                                 pitch = IsoProjection.defaultPitch
                             }
