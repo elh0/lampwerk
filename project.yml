@@ -21,6 +21,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: Lampwerk
         DEVELOPMENT_TEAM: CF8HY3UXL4
+        CODE_SIGN_ENTITLEMENTS: Lampwerk.entitlements
+        INFOPLIST_FILE: Lampwerk-Info.plist
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSCameraUsageDescription: "Lampwerk uses the camera to tag where lamps stand on set."
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES

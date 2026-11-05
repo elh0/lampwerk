@@ -8,6 +8,9 @@ struct HomeView: View {
     @State private var showingPower = false
     @State private var beta = false
     @State private var offerClaim = false
+    #if DEBUG
+    @State private var showingSpike = false
+    #endif
     @AppStorage(FoundingTester.dismissedKey) private var cardDismissed = false
 
     var body: some View {
@@ -66,6 +69,10 @@ struct HomeView: View {
                         .font(.lwBody).foregroundStyle(Palette.quiet)
                 } else {
                     Text("Saved on this phone").font(.lwBody).foregroundStyle(Palette.quiet)
+                        #if DEBUG
+                        // Sync spike (step 4 of the sync brief), debug builds only.
+                        .onLongPressGesture { showingSpike = true }
+                        #endif
                 }
                 Spacer()
                 Button("New plot") { showingNew = true }.buttonStyle(ActionButtonStyle(primary: true))
@@ -80,6 +87,9 @@ struct HomeView: View {
             beta = await FoundingTester.isBetaBuild()
             offerClaim = await FoundingTester.shouldOfferClaim()
         }
+        #if DEBUG
+        .sheet(isPresented: $showingSpike) { CloudKitSpikeView(plot: store.plots.first).presentationBackground(Palette.p1) }
+        #endif
         .sheet(isPresented: $showingPower) {
             PowerSheet { showingPower = false }
                 .readableWidth()
