@@ -6,6 +6,7 @@ struct LampwerkApp: App {
 
     init() {
         Fonts.registerBundled()
+        StandIn.preload()
     }
 
     var body: some Scene {

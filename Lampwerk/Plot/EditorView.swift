@@ -122,7 +122,8 @@ struct EditorView: View {
                     showPop: !drawerOpen,
                     say: say
                 )
-                .padding(.top, camOpen ? 110 : 0)
+                .padding(.top, camOpen && verticalSize != .compact ? 110 : 0)
+                .padding(.trailing, camOpen && verticalSize == .compact ? 170 : 0)
                 .transition(.opacity)
             }
             HStack(alignment: .top) {
@@ -159,6 +160,7 @@ struct EditorView: View {
         .clipped()
         .overlay(alignment: .bottomLeading) {
             // One small control panel: undo, redo, and delete whatever is picked (one lamp or a boxed group).
+            HStack(spacing: 8) {
             HStack(spacing: 0) {
                 panelButton("arrow.uturn.backward", "Undo", enabled: history.canUndo) { step(back: true, plot) }
                 panelButton("arrow.uturn.forward", "Redo", enabled: history.canRedo) { step(back: false, plot) }
@@ -168,9 +170,11 @@ struct EditorView: View {
             .padding(.horizontal, 4)
             .background(Palette.p2, in: Capsule())
             .overlay(Capsule().strokeBorder(Palette.ruleStrong))
+            if verticalSize == .compact { viewSwitch }
+            }
             .padding(12)
         }
-        .overlay(alignment: .bottomTrailing) { viewSwitch.padding(12) }
+        .overlay(alignment: .bottomTrailing) { if verticalSize != .compact { viewSwitch.padding(12) } }
         // The camera monitor floats over the plan, under the mode switch, so opening it never shifts the layout.
         .overlay(alignment: .topTrailing) { CameraPreview(plot: plot.wrappedValue).padding(.top, 58).padding(.trailing, 12) }
         .animation(.snappy(duration: 0.35), value: show3D)

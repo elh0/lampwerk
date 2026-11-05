@@ -54,11 +54,22 @@ enum StandIn {
 
     /// The sculpt: the Lee Perry-Smith head scan (Infinite-Realities, CC BY 3.0, credited in About),
     /// head and shoulders, in the same matte clay. Eyes sit 0.2 m above the node's origin, like the planar head.
-    private static func scanNode() -> SCNNode? {
+    /// Reading the scan takes a few seconds, so it's read once (at launch, off the main thread) and shared.
+    private static let scanGeometry: SCNGeometry? = {
         guard let url = Bundle.main.url(forResource: "StandInScan", withExtension: "obj") else { return nil }
         let asset = MDLAsset(url: url)
         guard let mesh = asset.object(at: 0) as? MDLMesh else { return nil }
-        let node = SCNNode(mdlObject: mesh)
+        return SCNGeometry(mdlMesh: mesh)
+    }()
+
+    /// Starts reading the scan in the background, so the camera view shows the head as soon as it opens.
+    static func preload() {
+        DispatchQueue.global(qos: .utility).async { _ = scanGeometry }
+    }
+
+    private static func scanNode() -> SCNNode? {
+        guard let geometry = scanGeometry?.copy() as? SCNGeometry else { return nil }
+        let node = SCNNode(geometry: geometry)
         let clay = material()
         node.geometry?.materials = [clay]
         node.castsShadow = true
