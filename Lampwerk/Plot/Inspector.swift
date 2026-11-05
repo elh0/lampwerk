@@ -43,6 +43,8 @@ struct Inspector: View {
                     .background(Palette.p0, in: RoundedRectangle(cornerRadius: Radius.card))
                     .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Palette.rule))
 
+                    if lamp.isLight, spreads(lamp).count > 1 { spreadSlider(lamp) }
+
                     if lamp.isLight {
                         if let range = lamp.cct, range.upperBound > range.lowerBound {
                             slider("Colour", value: $plot.items[index].cct, in: range, step: 100, text: "\(Int(item.cct)) K")
@@ -103,6 +105,27 @@ struct Inspector: View {
         guard plot.isOn(item) else { return "Off in \(plot.shot.title) · " + distance }
         let lux = Int(LightMath.lux(from: item, at: plot.talent, in: plot)).formatted()
         return "\(lux) lx at talent · \(distance) · " + String(format: "%.1f A", LightMath.amps(item, supply: supply))
+    }
+
+    /// The head's modifiers, tightest beam first, each with the beam it gives.
+    private func spreads(_ lamp: Lamp) -> [(modifier: String, beam: Double)] {
+        lamp.modifiers.map { ($0, Modifiers.beam[$0] ?? lamp.beam) }.sorted { $0.beam < $1.beam }
+    }
+
+    /// Slide to open or close the beam; it picks the modifier that gives that spread.
+    private func spreadSlider(_ lamp: Lamp) -> some View {
+        let options = spreads(lamp)
+        let i = options.firstIndex { $0.modifier == item.modifier } ?? 0
+        let now = options[i]
+        return slider("Spread", value: Binding(
+            get: { Double(i) },
+            set: { v in
+                let m = options[Int(v.rounded())].modifier
+                plot.items[index].modifier = m
+                LastModifier.set(lamp.id, m)
+            }
+        ), in: 0...Double(options.count - 1), step: 1,
+        text: now.beam >= 300 ? "All round" : "\(Int(now.beam))°")
     }
 
     private func pickerRow(_ label: String, _ value: String, selection: Binding<String>, options: [String], last: Bool = false) -> some View {

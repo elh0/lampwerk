@@ -1,8 +1,7 @@
 import SwiftUI
 
 /// iOS-style swipe to delete for the app's own ruled rows (they aren't Lists, so
-/// `.swipeActions` isn't available). Swipe left to reveal a bin; tap it, or swipe all
-/// the way, to call `action`. A swipe right, or another swipe,
+/// `.swipeActions` isn't available). Swipe left to reveal a bin; tap it to call `action`. A swipe right, or another swipe,
 /// closes it. Press and hold still works alongside.
 struct SwipeToDelete: ViewModifier {
     var enabled = true
@@ -11,7 +10,6 @@ struct SwipeToDelete: ViewModifier {
     @State private var offset: CGFloat = 0
     @State private var settled: CGFloat = 0
     private let reveal: CGFloat = 72
-    private let fullSwipe: CGFloat = 180
 
     func body(content: Content) -> some View {
         ZStack(alignment: .trailing) {
@@ -51,10 +49,8 @@ struct SwipeToDelete: ViewModifier {
                         return
                     }
                     let end = settled + v.predictedEndTranslation.width
-                    if -end > fullSwipe {
-                        close()
-                        action()
-                    } else if -end > reveal / 2 {
+                    // A swipe only shows the bin; deleting always takes a tap on it.
+                    if -end > reveal / 2 {
                         withAnimation(.snappy(duration: 0.2)) { offset = -reveal }
                         settled = -reveal
                     } else {

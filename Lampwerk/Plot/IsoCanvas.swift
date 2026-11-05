@@ -343,7 +343,7 @@ struct IsoCanvas: View {
 
     private func hit(_ s: CGPoint, _ v: IsoProjection) -> Target {
         func near(_ p: CGPoint) -> CGFloat { hypot(p.x - s.x, p.y - s.y) }
-        let reach: CGFloat = 28
+        let reach: CGFloat = 34
         let W = plot.roomWidth, D = plot.roomDepth
         if near(v.point(W + 0.45, D / 2)) < 22 { return .wall(true) }
         if near(v.point(W / 2, D + 0.45)) < 22 { return .wall(false) }

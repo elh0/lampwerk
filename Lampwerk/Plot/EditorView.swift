@@ -329,6 +329,15 @@ struct EditorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Menu {
                 Button("Add a lamp", systemImage: "plus") { showingLibrary = true }
+                Menu("Start from a setup", systemImage: "square.grid.2x2") {
+                    ForEach(Starter.allCases.filter { $0 != .blank }) { s in
+                        Button(s.title) {
+                            selected = nil
+                            binding.wrappedValue.apply(s)
+                            say("\(s.title) · Undo bottom left")
+                        }
+                    }
+                }
                 Button("Room size and floor plan", systemImage: "square.dashed") { showingSpace = true }
                 Button("Tag the room in AR", systemImage: "arkit") {
                     if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }
@@ -376,7 +385,7 @@ struct EditorView: View {
                 .accessibilityLabel(drawerOpen ? "Close lamps" : "Open lamps")
                 // With a lamp's settings open, the quick row steps aside; Swap on its card does the same job.
                 if !(drawerOpen && selected != nil) {
-                    QuickRow(picked: picked(plot.wrappedValue), armed: armed) { lamp in quick(lamp, plot) }
+                    QuickRow(picked: nil, armed: armed) { lamp in quick(lamp, plot) }
                         .padding(.bottom, 8)
                 }
                 HStack(spacing: 4) {
@@ -407,7 +416,7 @@ struct EditorView: View {
             if drawerOpen {
                 Rectangle().fill(Palette.rule).frame(height: 1)
                 if plot.wrappedValue.items.isEmpty {
-                    hint("No lamps yet. Tap Add to place one, or tag the room in AR.")
+                    hint("No lamps yet. Pick one above and tap the plan, or Add → Start from a setup.")
                 } else {
                     rail(plot)
                     if selected == nil {
@@ -513,16 +522,11 @@ struct EditorView: View {
         plot.items.first { $0.id == selected }?.lamp
     }
 
-    /// A quick lamp: swaps the picked lamp's head, or waits for a tap on the plan. Tap it again to put it back.
+    /// A quick lamp always adds: it lets go of any picked lamp and waits for a tap on the plan.
+    /// Swapping a head lives on the lamp's card. Tap the same quick lamp again to put it back.
     private func quick(_ lamp: Lamp, _ plot: Binding<Plot>) {
-        if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
-            if plot.wrappedValue.items[i].lampID != lamp.id {
-                plot.wrappedValue.items[i].swapHead(to: lamp)
-                say("Swapped to \(lamp.shortName)")
-            }
-        } else {
-            armed = armed?.id == lamp.id ? nil : lamp
-        }
+        selected = nil
+        armed = armed?.id == lamp.id ? nil : lamp
     }
 
     /// Puts a lamp down where you tapped or let go, on the 25 cm grid and clear of the walls, aimed at the talent.
@@ -533,6 +537,7 @@ struct EditorView: View {
         let at = Point2(x: min(r.roomWidth - 0.3, max(0.3, g(p.x))), y: min(r.roomDepth - 0.3, max(0.3, g(p.y))))
         plot.wrappedValue.items.append(newItem(lamp, at: at, in: r))
         Sketch.Shape.remember(lamp)
+        QuickLamps.used(lamp)
         armed = nil
         say("Dropped \(lamp.shortName)")
     }
@@ -556,10 +561,11 @@ struct Readout: View {
         let load = LightMath.load(plot, supply: supply)
         let capacity = Double(max(1, LightMath.circuits(plot, supply: supply).count)) * supply.circuitAmps
         let key = Int(LightMath.keyLux(plot))
+        // Each figure holds the width of its longest value, so the box never jumps as numbers change.
         HStack(spacing: 10) {
-            Text("\(key.formatted()) lx").contentTransition(.numericText())
-            Text(LightMath.ratioText(plot)).foregroundStyle(Palette.quiet)
-            Text(String(format: "%.1f/%.0f A", load.amps, capacity)).contentTransition(.numericText())
+            steady("00,000 lx") { Text("\(key.formatted()) lx").contentTransition(.numericText()) }
+            steady("No fill") { Text(LightMath.ratioText(plot)).foregroundStyle(Palette.quiet) }
+            steady("000.0/000 A") { Text(String(format: "%.1f/%.0f A", load.amps, capacity)).contentTransition(.numericText()) }
         }
         .font(.lwData).foregroundStyle(Palette.text).lineLimit(1)
         .padding(.horizontal, 10).frame(minHeight: 30)
@@ -569,6 +575,15 @@ struct Readout: View {
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Key \(key) lux, ratio \(LightMath.ratioText(plot)), load \(String(format: "%.1f", load.amps)) of \(Int(capacity)) amps")
+    }
+}
+
+extension Readout {
+    private func steady(_ widest: String, @ViewBuilder _ text: () -> some View) -> some View {
+        ZStack(alignment: .leading) {
+            Text(widest).hidden()
+            text()
+        }
     }
 }
 

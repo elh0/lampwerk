@@ -1,5 +1,16 @@
 import Foundation
 
+extension Plot {
+    /// Swaps the lamps for a classic setup, centred in this room, with the talent and camera where it expects them.
+    mutating func apply(_ starter: Starter) {
+        let dx = (roomWidth - 6) / 2, dy = (roomDepth - 8.4) / 2
+        self.starter = starter
+        talent = Point2(x: Starter.talent.x + dx, y: Starter.talent.y + dy)
+        camera = Point2(x: 3 + dx, y: min(roomDepth - 0.4, 7.6 + dy))
+        items = starter.items().map { var i = $0; i.x += dx; i.y += dy; return i }
+    }
+}
+
 /// The classic setups a new plot can start from. Ported from the prototype's `SETUPS`.
 enum Starter: String, Codable, CaseIterable, Identifiable, Sendable {
     case threePoint, rembrandt, window, car, blank

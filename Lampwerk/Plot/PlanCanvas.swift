@@ -156,7 +156,7 @@ struct PlanCanvas: View {
 
     private func hitTest(_ p: Point2, _ v: PlanViewport) -> Target {
         // Never smaller than a fingertip.
-        let reach = max(0.5, 22 / v.scale)
+        let reach = max(0.5, 30 / v.scale)
         if let item = plot.items.first(where: { $0.id == selected }), handle(item).distance(to: p) < reach * 0.8 {
             return .aim(item.id)
         }

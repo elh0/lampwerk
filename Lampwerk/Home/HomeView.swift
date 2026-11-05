@@ -77,7 +77,11 @@ struct HomeView: View {
                     Text("Saved on this phone").font(.lwBody).foregroundStyle(Palette.quiet)
                 }
                 Spacer()
-                Button("New plot") { showingNew = true }.buttonStyle(ActionButtonStyle(primary: true))
+                Button("New plot") {
+                    // Straight to an empty plan; a setup is one pick away under Add.
+                    let plot = store.create(name: "", starter: .blank)
+                    open(plot.id)
+                }.buttonStyle(ActionButtonStyle(primary: true))
             }
             .padding(.horizontal, 16)
             .frame(minHeight: 60)

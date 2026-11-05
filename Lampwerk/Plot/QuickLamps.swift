@@ -4,7 +4,23 @@ import UniformTypeIdentifiers
 /// The heads a gaffer reaches for most, one tap away under the plan.
 enum QuickLamps {
     static let ids = ["a600", "a1200", "m18", "forza", "s60", "s30", "gem", "titan", "helios", "china", "f8d", "floppy"]
-    static var all: [Lamp] { ids.compactMap(LampLibrary.lamp) }
+    private static let recentKey = "recentLamps"
+
+    /// Your most recently used heads first, then the usual ones. Twelve in all.
+    static var all: [Lamp] {
+        let recent = UserDefaults.standard.stringArray(forKey: recentKey) ?? []
+        var out: [String] = []
+        for id in recent + ids where !out.contains(id) && LampLibrary.lamp(id) != nil { out.append(id) }
+        return out.prefix(12).compactMap(LampLibrary.lamp)
+    }
+
+    /// Remembers a head you just put on a plot, so it leads the quick row next time.
+    static func used(_ lamp: Lamp) {
+        var recent = UserDefaults.standard.stringArray(forKey: recentKey) ?? []
+        recent.removeAll { $0 == lamp.id }
+        recent.insert(lamp.id, at: 0)
+        UserDefaults.standard.set(Array(recent.prefix(6)), forKey: recentKey)
+    }
 
     /// What you'd most likely swap a head for: the same group first, then other heads of the same sort. Six at most.
     static func swaps(for lamp: Lamp) -> [Lamp] {
