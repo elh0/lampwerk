@@ -14,10 +14,11 @@ enum StandIn {
 
     /// Head, neck and shoulders in one node, already in the clay material.
     static func node(_ style: Style = .planes) -> SCNNode {
-        if style == .sculpt, let scan = scanNode() { return scan }
+        // The scanned head is the stand-in; the smooth one below is only a fallback if the file is missing.
+        if let scan = scanNode() { return scan }
         let root = SCNNode()
-        let head = SCNNode(geometry: style == .planes ? PlanarHead.geometry() : headGeometry())
-        head.position = SCNVector3(0, style == .planes ? 0.2 : 0.19, 0)
+        let head = SCNNode(geometry: headGeometry())
+        head.position = SCNVector3(0, 0.19, 0)
         root.addChildNode(head)
 
         let neckShape = SCNCylinder(radius: 0.062, height: 0.13)

@@ -8,7 +8,9 @@ import SwiftUI
 struct CameraPreview: View {
     let plot: Plot
     @State private var large = false
-    @AppStorage("previewSubject") private var subject = StandIn.Style.planes.rawValue
+    /// The camera's stop and ISO. Exposure is locked to these, so a brighter lamp really reads brighter.
+    @AppStorage("previewStop") private var stop = 2.8
+    @AppStorage("previewISO") private var iso = 800
     /// Closed, it folds down to a small CAM pill; tap that to bring it back.
     @AppStorage("previewOpen") private var open = true
     /// Pinch inside the monitor to push in on the face.
@@ -33,9 +35,9 @@ struct CameraPreview: View {
     }
 
     @ViewBuilder private var monitor: some View {
-        let width: CGFloat = large ? 220 : 144
+        let width: CGFloat = large ? 250 : 144
         VStack(spacing: 0) {
-            PreviewScene(plot: plot, subject: StandIn.Style(rawValue: subject) ?? .planes, zoom: zoom * pinch)
+            PreviewScene(plot: plot, subject: .sculpt, zoom: zoom * pinch, exposureLux: CameraPreview.exposureLux(stop: stop, iso: iso))
                 .frame(width: width, height: width * 9 / 16)
                 .overlay { FrameLines().stroke(Palette.text.opacity(0.55), lineWidth: 1).padding(6).allowsHitTesting(false) }
                 // The 3D view ignores touches; this catches the tap so it never falls through to the plan.
@@ -46,20 +48,48 @@ struct CameraPreview: View {
                             .updating($pinch) { v, s, _ in s = v.magnification }
                             .onEnded { v in zoom = min(3, max(0.6, zoom * v.magnification)) })
                 }
-            HStack {
-                Text("CAM").foregroundStyle(Palette.quiet)
-                Spacer()
-                // Planes or the scanned sculpt: tap the word to swap the stand-in.
-                if large {
-                    Button(subject == StandIn.Style.sculpt.rawValue ? "SCULPT" : "PLANES") {
-                        subject = subject == StandIn.Style.sculpt.rawValue ? StandIn.Style.planes.rawValue : StandIn.Style.sculpt.rawValue
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Palette.text)
-                    .accessibilityLabel("Stand-in. Tap to swap planes and sculpt.")
-                    Spacer()
+            strip(width: width)
+        }
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.ruleStrong))
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.snappy(duration: 0.22)) { large.toggle() } }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Camera view of the talent, lit by this plot. Tap to make it bigger.")
+    }
+
+    static let stops: [Double] = [1.4, 2, 2.8, 4, 5.6, 8, 11, 16]
+    static let isos = [400, 800, 1600, 3200]
+
+    /// Lux on the subject that gives a mid-grey exposure at this stop and ISO, at 1/48 s (180° at 24 fps).
+    /// Incident meter equation, E = C·N²/(t·S), with C = 250.
+    static func exposureLux(stop: Double, iso: Int) -> Double {
+        250 * stop * stop / ((1.0 / 48) * Double(iso))
+    }
+
+    /// The key lamp, its number on the plot, and its lux at the talent.
+    static func key(_ plot: Plot) -> (number: Int, item: PlacedLamp, lux: Double)? {
+        guard let i = plot.items.firstIndex(where: { $0.role == .key && plot.isOn($0) }) else { return nil }
+        return (i + 1, plot.items[i], LightMath.lux(from: plot.items[i], at: plot.talent, in: plot))
+    }
+
+    /// "KEY 01 · M18 · 307 lx · +1.4": which lamp is the key, how bright it is, and how far over or under the exposure.
+    private func strip(width: CGFloat) -> some View {
+        let e = CameraPreview.exposureLux(stop: stop, iso: iso)
+        let key = CameraPreview.key(plot)
+        let over = key.map { log2(max($0.lux, 0.01) / e) }
+        let overText = over.map { String(format: "%+.1f", $0) } ?? ""
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                if let key {
+                    Text(large ? String(format: "KEY %02d · %@ · %@ lx", key.number, key.item.lamp?.shortName ?? "", Int(key.lux).formatted()) : "KEY")
+                        .foregroundStyle(Palette.quiet).lineLimit(1)
+                    Text(overText).foregroundStyle(abs(over ?? 0) > 2 ? Palette.gel : Palette.text)
+                } else {
+                    Text("NO KEY ON").foregroundStyle(Palette.quiet)
                 }
-                Text("\(Int(CameraPreview.keyKelvin(plot))) K").foregroundStyle(Palette.quiet)
+                Spacer(minLength: 0)
                 Button { withAnimation(.snappy(duration: 0.2)) { open = false; large = false } } label: {
                     Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Palette.text)
@@ -69,18 +99,28 @@ struct CameraPreview: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close the camera view")
             }
-            .font(.lwLabel)
-            .padding(.horizontal, 7)
-            .frame(width: width, height: 18)
-            .background(Color(hex: 0x0A0A09))
+            if large {
+                // Tap the stop or ISO to step it; the picture and the stops figure follow.
+                HStack(spacing: 10) {
+                    Button(String(format: stop < 2 ? "T%.1f" : (stop.truncatingRemainder(dividingBy: 1) == 0 ? "T%.0f" : "T%.1f"), stop)) {
+                        let i = CameraPreview.stops.firstIndex(of: stop) ?? 2
+                        stop = CameraPreview.stops[(i + 1) % CameraPreview.stops.count]
+                    }
+                    Button("ISO \(iso)") {
+                        let i = CameraPreview.isos.firstIndex(of: iso) ?? 1
+                        iso = CameraPreview.isos[(i + 1) % CameraPreview.isos.count]
+                    }
+                    Spacer(minLength: 0)
+                    Text("\(Int(CameraPreview.keyKelvin(plot))) K").foregroundStyle(Palette.quiet)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Palette.text)
+            }
         }
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.ruleStrong))
-        .contentShape(Rectangle())
-        .onTapGesture { withAnimation(.snappy(duration: 0.22)) { large.toggle() } }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Camera view of the talent, lit by this plot. Tap to make it bigger.")
+        .font(.lwLabel)
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .frame(width: width, alignment: .leading)
+        .background(Color(hex: 0x0A0A09))
     }
 
     /// The key's colour after its gel, which the camera is white-balanced to.
@@ -143,6 +183,7 @@ private struct PreviewScene: UIViewRepresentable {
     let plot: Plot
     let subject: StandIn.Style
     var zoom: CGFloat = 1
+    var exposureLux: Double = 120
 
     func makeCoordinator() -> PreviewRig { PreviewRig() }
 
@@ -159,6 +200,7 @@ private struct PreviewScene: UIViewRepresentable {
         view.isJitteringEnabled = false
         context.coordinator.setSubject(subject)
         context.coordinator.zoom = Double(zoom)
+        context.coordinator.exposureLux = exposureLux
         context.coordinator.update(plot, view: view)
         return view
     }
@@ -166,6 +208,7 @@ private struct PreviewScene: UIViewRepresentable {
     func updateUIView(_ view: SCNView, context: Context) {
         context.coordinator.setSubject(subject)
         context.coordinator.zoom = Double(zoom)
+        context.coordinator.exposureLux = exposureLux
         context.coordinator.update(plot, view: view)
     }
 }
@@ -177,6 +220,8 @@ final class PreviewRig {
     private var standIn = StandIn.node()
     /// Pinch zoom from the monitor: 1 is the medium close-up.
     var zoom = 1.0
+    /// Lux that exposes clay at mid-grey; set from the monitor's stop and ISO.
+    var exposureLux = 120.0
     private var subject = StandIn.Style.planes
     private let rig = SCNNode()
     private var last = Date.distantPast
@@ -291,8 +336,6 @@ final class PreviewRig {
         cameraNode.position = SCNVector3(Float(dir.x * back), Float(Self.eyes - 0.05), Float(dir.y * back))
         cameraNode.look(at: SCNVector3(0, Float(Self.eyes - 0.04), 0))
 
-        let keyLux = max(1, LightMath.keyLux(plot) > 0 ? LightMath.keyLux(plot)
-                         : plot.items.filter { plot.isOn($0) }.map { LightMath.lux(from: $0, at: t, in: plot) }.max() ?? 1)
         let wb = CameraPreview.kelvin(CameraPreview.keyKelvin(plot))
 
         for item in plot.items {
@@ -314,7 +357,7 @@ final class PreviewRig {
             let light = SCNLight()
             // Lux at the talent already allows for distance, beam and losses, so the light itself doesn't fall off.
             light.attenuationFalloffExponent = 0
-            light.intensity = CGFloat(85 * lux / keyLux)
+            light.intensity = CGFloat(70 * lux / exposureLux)
             var rgb = lamp.isLight ? CameraPreview.kelvin(CameraPreview.effectiveKelvin(item)) / wb : SIMD3(1, 1, 1)
             if item.gel == "¼ Plus green" { rgb *= SIMD3(0.92, 1, 0.92) }
             let top = max(rgb.x, rgb.y, rgb.z, 1)
