@@ -13,8 +13,8 @@ enum StandIn {
     /// Head, neck and shoulders in one node, already in the clay material.
     static func node(_ style: Style = .planes) -> SCNNode {
         let root = SCNNode()
-        let head = SCNNode(geometry: headGeometry(planes: style == .planes))
-        head.position = SCNVector3(0, 0.19, 0)
+        let head = SCNNode(geometry: style == .planes ? PlanarHead.geometry() : headGeometry())
+        head.position = SCNVector3(0, style == .planes ? 0.2 : 0.19, 0)
         root.addChildNode(head)
 
         let neckShape = SCNCylinder(radius: 0.062, height: 0.13)
@@ -52,7 +52,8 @@ enum StandIn {
     static func material() -> SCNMaterial {
         let m = SCNMaterial()
         m.lightingModel = .physicallyBased
-        m.diffuse.contents = UIColor(white: 0.82, alpha: 1)
+        m.diffuse.contents = UIColor(white: 0.74, alpha: 1)
+        m.isDoubleSided = true
         m.roughness.contents = 0.8
         m.metalness.contents = 0.0
         return m

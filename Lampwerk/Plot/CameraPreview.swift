@@ -9,31 +9,61 @@ struct CameraPreview: View {
     let plot: Plot
     @State private var large = false
     @AppStorage("previewSubject") private var subject = StandIn.Style.planes.rawValue
+    /// Closed, it folds down to a small CAM pill; tap that to bring it back.
+    @AppStorage("previewOpen") private var open = true
+    /// Pinch inside the monitor to push in on the face.
+    @State private var zoom: CGFloat = 1
+    @GestureState private var pinch: CGFloat = 1
 
     var body: some View {
-        let width: CGFloat = large ? 330 : 144
+        if open { monitor } else {
+            Button { withAnimation(.snappy(duration: 0.2)) { open = true } } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "video").font(.system(size: 11, weight: .medium))
+                    Text("CAM").font(.lwLabel)
+                }
+                .foregroundStyle(Palette.text)
+                .padding(.horizontal, 10).frame(minHeight: 30)
+                .background(Palette.p2, in: Capsule())
+                .overlay(Capsule().strokeBorder(Palette.ruleStrong))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Show the camera view")
+        }
+    }
+
+    @ViewBuilder private var monitor: some View {
+        let width: CGFloat = large ? 220 : 144
         VStack(spacing: 0) {
-            PreviewScene(plot: plot, subject: StandIn.Style(rawValue: subject) ?? .planes)
+            PreviewScene(plot: plot, subject: .planes, zoom: zoom * pinch)
                 .frame(width: width, height: width * 9 / 16)
                 .overlay { FrameLines().stroke(Palette.text.opacity(0.55), lineWidth: 1).padding(6).allowsHitTesting(false) }
                 // The 3D view ignores touches; this catches the tap so it never falls through to the plan.
-                .overlay { Color.clear.contentShape(Rectangle()).onTapGesture { withAnimation(.snappy(duration: 0.22)) { large.toggle() } } }
+                .overlay {
+                    Color.clear.contentShape(Rectangle())
+                        .onTapGesture { withAnimation(.snappy(duration: 0.22)) { large.toggle() } }
+                        .gesture(MagnifyGesture()
+                            .updating($pinch) { v, s, _ in s = v.magnification }
+                            .onEnded { v in zoom = min(3, max(0.6, zoom * v.magnification)) })
+                }
             HStack {
                 Text("CAM").foregroundStyle(Palette.quiet)
                 Spacer()
-                // Planes or sculpt: tap the word to swap the stand-in.
-                Button(subject == StandIn.Style.planes.rawValue ? "PLANES" : "SCULPT") {
-                    subject = subject == StandIn.Style.planes.rawValue ? StandIn.Style.sculpt.rawValue : StandIn.Style.planes.rawValue
+                // The smooth sculpt comes back as an option once a proper scanned head is in.
+                if large { Text("PLANES").foregroundStyle(Palette.quiet); Spacer() }
+                Text("\(Int(CameraPreview.keyKelvin(plot))) K").foregroundStyle(Palette.quiet)
+                Button { withAnimation(.snappy(duration: 0.2)) { open = false; large = false } } label: {
+                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Palette.text)
+                        .frame(width: 22, height: 18)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Palette.text)
-                .accessibilityLabel("Stand-in: \(subject). Tap to swap.")
-                Spacer()
-                Text("\(Int(CameraPreview.keyKelvin(plot))) K").foregroundStyle(Palette.quiet)
+                .accessibilityLabel("Close the camera view")
             }
             .font(.lwLabel)
             .padding(.horizontal, 7)
-            .frame(height: 18)
+            .frame(width: width, height: 18)
             .background(Color(hex: 0x0A0A09))
         }
         .background(Color.black)
@@ -104,6 +134,7 @@ private struct FrameLines: Shape {
 private struct PreviewScene: UIViewRepresentable {
     let plot: Plot
     let subject: StandIn.Style
+    var zoom: CGFloat = 1
 
     func makeCoordinator() -> PreviewRig { PreviewRig() }
 
@@ -119,12 +150,14 @@ private struct PreviewScene: UIViewRepresentable {
         view.isUserInteractionEnabled = false
         view.isJitteringEnabled = false
         context.coordinator.setSubject(subject)
+        context.coordinator.zoom = Double(zoom)
         context.coordinator.update(plot, view: view)
         return view
     }
 
     func updateUIView(_ view: SCNView, context: Context) {
         context.coordinator.setSubject(subject)
+        context.coordinator.zoom = Double(zoom)
         context.coordinator.update(plot, view: view)
     }
 }
@@ -134,6 +167,8 @@ final class PreviewRig {
     let scene = SCNScene()
     let cameraNode = SCNNode()
     private var standIn = StandIn.node()
+    /// Pinch zoom from the monitor: 1 is the medium close-up.
+    var zoom = 1.0
     private var subject = StandIn.Style.planes
     private let rig = SCNNode()
     private var last = Date.distantPast
@@ -145,7 +180,7 @@ final class PreviewRig {
     /// The stand-in's eyes sit this far above its neck base.
     private static let eyesAboveNeck = 0.2
     /// Height of the frame: a medium close-up, head and shoulders.
-    private static let frameHeight = 0.4
+    private static let frameHeight = 0.46
     private static let fovDegrees: CGFloat = 21
 
     init() {
@@ -244,9 +279,9 @@ final class PreviewRig {
         let dir = toCam / dist
         standIn.eulerAngles.y = Float(atan2(dir.x, dir.y))
         let fov = Double(Self.fovDegrees) * .pi / 180
-        let back = Self.frameHeight / 2 / tan(fov / 2)
+        let back = Self.frameHeight / max(0.6, zoom) / 2 / tan(fov / 2)
         cameraNode.position = SCNVector3(Float(dir.x * back), Float(Self.eyes - 0.05), Float(dir.y * back))
-        cameraNode.look(at: SCNVector3(0, Float(Self.eyes - 0.07), 0))
+        cameraNode.look(at: SCNVector3(0, Float(Self.eyes - 0.04), 0))
 
         let keyLux = max(1, LightMath.keyLux(plot) > 0 ? LightMath.keyLux(plot)
                          : plot.items.filter { plot.isOn($0) }.map { LightMath.lux(from: $0, at: t, in: plot) }.max() ?? 1)
@@ -271,7 +306,7 @@ final class PreviewRig {
             let light = SCNLight()
             // Lux at the talent already allows for distance, beam and losses, so the light itself doesn't fall off.
             light.attenuationFalloffExponent = 0
-            light.intensity = CGFloat(150 * lux / keyLux)
+            light.intensity = CGFloat(85 * lux / keyLux)
             var rgb = lamp.isLight ? CameraPreview.kelvin(CameraPreview.effectiveKelvin(item)) / wb : SIMD3(1, 1, 1)
             if item.gel == "¼ Plus green" { rgb *= SIMD3(0.92, 1, 0.92) }
             let top = max(rgb.x, rgb.y, rgb.z, 1)
