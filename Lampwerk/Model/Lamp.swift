@@ -163,14 +163,14 @@ enum LampLibrary {
         Lamp(id: "red", name: "Redhead 800W", brand: "generic", group: .tungsten, kind: .point, watts: 800, beam: 87, cct: 3200...3200, efficacy: 20, width: 0.26, depth: 0.22),
         Lamp(id: "lamp", name: "Table lamp", brand: "practical", group: .practicals, kind: .practical, watts: 60, beam: 300, cct: 2700...2700, efficacy: 15, width: 0.3, depth: 0.3),
         Lamp(id: "china", name: "China ball", brand: "practical", group: .practicals, kind: .practical, watts: 150, beam: 300, cct: 2700...5600, efficacy: 40, width: 0.5, depth: 0.5),
-        // Big heads for stages and night exteriors. No spec sheets checked yet, so their numbers come from watts
-        // and read as approximate in the app.
+        // Big heads for stages and night exteriors. M40, M90 and ARRIMAX are checked against ARRI's sheets (Specs.swift);
+        // the rest still come from watts and read as approximate in the app.
         Lamp(id: "s360", name: "SkyPanel S360-C", brand: "Arri", group: .panels, kind: .panel, watts: 1500, beam: 105, cct: 2800...10000, efficacy: 60, width: 1.2, depth: 0.7),
         Lamp(id: "vtx24", name: "Vortex24", brand: "Creamsource", group: .panels, kind: .panel, watts: 1300, beam: 110, cct: 2200...15000, efficacy: 70, width: 1.2, depth: 0.32),
-        Lamp(id: "m40", name: "M40", brand: "Arri", group: .hmi, kind: .fresnel, watts: 4000, beam: 50, cct: 5600...5600, efficacy: 90, width: 0.7, depth: 0.6),
-        Lamp(id: "m90", name: "M90", brand: "Arri", group: .hmi, kind: .fresnel, watts: 9000, beam: 55, cct: 5600...5600, efficacy: 90, width: 1.0, depth: 0.9),
+        Lamp(id: "m40", name: "M40", brand: "Arri", group: .hmi, kind: .fresnel, watts: 4000, beam: 30, cct: 5600...5600, efficacy: 90, width: 0.7, depth: 0.6),
+        Lamp(id: "m90", name: "M90", brand: "Arri", group: .hmi, kind: .fresnel, watts: 9000, beam: 49, cct: 5600...5600, efficacy: 90, width: 1.0, depth: 0.9),
         Lamp(id: "h6", name: "6K HMI par", brand: "generic", group: .hmi, kind: .fresnel, watts: 6000, beam: 30, cct: 5600...5600, efficacy: 90, width: 0.8, depth: 0.65),
-        Lamp(id: "amax", name: "ARRIMAX 18/12", brand: "Arri", group: .hmi, kind: .fresnel, watts: 18000, beam: 40, cct: 5600...5600, efficacy: 95, width: 1.1, depth: 1.0),
+        Lamp(id: "amax", name: "ARRIMAX 18/12", brand: "Arri", group: .hmi, kind: .fresnel, watts: 18000, beam: 50, cct: 5600...5600, efficacy: 95, width: 1.1, depth: 1.0),
         Lamp(id: "t5k", name: "5K Skypan", brand: "generic", group: .tungsten, kind: .panel, watts: 5000, beam: 100, cct: 3200...3200, efficacy: 20, width: 0.9, depth: 0.5),
         Lamp(id: "t10k", name: "10K fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 10000, beam: 50, cct: 3200...3200, efficacy: 22, width: 0.7, depth: 0.6),
         Lamp(id: "t20k", name: "20K fresnel", brand: "generic", group: .tungsten, kind: .fresnel, watts: 20000, beam: 50, cct: 3200...3200, efficacy: 22, width: 0.9, depth: 0.8),

@@ -82,6 +82,14 @@ extension Lamp {
                     url: "https://www.bhphotovideo.com/c/product/575718-REG/Arri_551201_T2_Location_Fresnel.html"),
         "red": Spec(lux3m: 933, beam: 87, drawW: 800, source: .retailer, note: "Retailer listing, Redhead 800 full flood, 3200 K (2,100 lx at 2 m)",
                     url: "https://www.bhphotovideo.com/c/product/1145959-REG/ltm_pk_red650_redhead_650_800w_pak_kit.html"),
+        // Big HMIs, checked against ARRI's data sheets (Sep 2018 / Jul 2025). Lux at 3 m is scaled from the sheet's
+        // reading by the inverse square law. Draw is the lamp's rating; ballast losses aren't on the sheets.
+        "m40": Spec(lux3m: 72222, beam: 30, drawW: 4000, source: .maker, note: "ARRI spec sheet, M40 medium lens 30° (6,500 lx at 10 m), 4 kW lamp",
+                    url: "https://www.arri.com/resource/blob/31488/a1f4f81bb2bdcab99da536ee7335a0b5/arri-m-series-m40-data-sheet-de-sep2018-data.pdf"),
+        "m90": Spec(lux3m: 84333, beam: 49, drawW: 9000, source: .maker, note: "ARRI spec sheet, M90 flood 49° (7,590 lx at 10 m), 9 kW lamp",
+                    url: "https://www.arri.com/resource/blob/31492/2de92c65800de8044d623b0d9ea0a9d9/arri-m-series-m90-data-sheet-de-sep2018-data.pdf"),
+        "amax": Spec(lux3m: 142500, beam: 50, drawW: 18000, source: .maker, note: "ARRI spec sheet, ARRIMAX 18/12 flood 50° (5,700 lx at 15 m), 18 kW lamp",
+                    url: "https://www.arri.com/resource/blob/31496/61b49177b25c72b5077871afdbcd289c/arri-m-series-arrimax-data-sheet-de-sep2018-data.pdf"),
         "china": Spec(lux3m: 18, beam: 300, drawW: 150, source: .estimate, note: "Estimate: 24 in lantern on a 150 W household bulb",
                     url: ""),
     ]
