@@ -65,7 +65,7 @@ struct EditorView: View {
     private func layout(_ plot: Binding<Plot>) -> some View {
         let wide = verticalSize == .compact
         return VStack(spacing: 0) {
-            topBar(plot.wrappedValue)
+            topBar(plot)
             ZStack(alignment: wide ? .topTrailing : .bottom) {
                 plan(plot)
                     // Keep the plan clear of the drawer: above it upright, beside it on its side.
@@ -91,7 +91,9 @@ struct EditorView: View {
                 IsoCanvas(
                     plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, yaw: $yaw, pitch: $pitch, armed: armed,
                     drop: { id, at in drop(id, at: at, plot) },
-                    more: { drawerOpen = true }
+                    more: { drawerOpen = true },
+                    showPop: !drawerOpen,
+                    say: say
                 )
                 .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.94)), removal: .opacity))
             } else {
@@ -100,6 +102,7 @@ struct EditorView: View {
                     drop: { id, at in drop(id, at: at, plot) },
                     more: { drawerOpen = true },
                     mode: planMode,
+                    showPop: !drawerOpen,
                     say: say
                 )
                 .transition(.opacity)
@@ -284,8 +287,9 @@ struct EditorView: View {
     }
 
     /// Back, the plot's name and size, Add (a lamp, or the whole room in AR) and Send.
-    private func topBar(_ plot: Plot) -> some View {
-        HStack(spacing: 10) {
+    private func topBar(_ binding: Binding<Plot>) -> some View {
+        let plot = binding.wrappedValue
+        return HStack(spacing: 10) {
             Button(action: close) {
                 Image(systemName: "chevron.left").font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Palette.text)
@@ -316,6 +320,10 @@ struct EditorView: View {
                 Button("Add a lamp", systemImage: "plus") { showingLibrary = true }
                 Button("Tag the room in AR", systemImage: "arkit") {
                     if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }
+                }
+                if !plot.items.isEmpty {
+                    Divider()
+                    Button("Remove all lamps", systemImage: "trash", role: .destructive) { clearAll(binding) }
                 }
             } label: {
                 Text("Add")
@@ -354,8 +362,11 @@ struct EditorView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(drawerOpen ? "Close lamps" : "Open lamps")
-                QuickRow(picked: picked(plot.wrappedValue), armed: armed) { lamp in quick(lamp, plot) }
-                    .padding(.bottom, 8)
+                // With a lamp's settings open, the quick row steps aside; Swap on its card does the same job.
+                if !(drawerOpen && selected != nil) {
+                    QuickRow(picked: picked(plot.wrappedValue), armed: armed) { lamp in quick(lamp, plot) }
+                        .padding(.bottom, 8)
+                }
                 HStack(spacing: 4) {
                     ForEach(Shot.allCases, id: \.self) { shot in
                         Chip(title: shot.title, selected: plot.wrappedValue.shot == shot) {
@@ -383,7 +394,7 @@ struct EditorView: View {
                 } else {
                     rail(plot)
                     if selected == nil {
-                        hint("Tap a lamp on the plan to change it, or here for all its settings.")
+                        hint("Tap a lamp to change it. Press and hold one to remove it.")
                     }
                     inspector(plot)
                 }
@@ -439,7 +450,10 @@ struct EditorView: View {
 
     @ViewBuilder private func inspector(_ plot: Binding<Plot>) -> some View {
         if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
-            Inspector(plot: plot, index: i, supply: store.supply, selected: $selected)
+            Inspector(plot: plot, index: i, supply: store.supply, selected: $selected) {
+                selected = nil
+                drawerOpen = false
+            }
         }
     }
 

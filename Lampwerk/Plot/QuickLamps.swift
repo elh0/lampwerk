@@ -86,8 +86,8 @@ struct QuickRow: View {
     }
 }
 
-/// The small card over a tapped lamp: on or off, remove, and one row of its mods.
-/// Tap the lamp again and the row turns into the heads you'd swap it for.
+/// The small card over a tapped lamp, the only thing a tap opens: on or off, its modifier, swap the head,
+/// remove, and More for everything else. One row, so it never covers the plan.
 struct LampPop: View {
     enum Tab { case mods, swap }
 
@@ -101,49 +101,46 @@ struct LampPop: View {
     var body: some View {
         if let i = plot.items.firstIndex(where: { $0.id == id }), let lamp = plot.items[i].lamp {
             let item = plot.items[i]
-            let mods = Array(lamp.modifiers.prefix(5))
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Text(String(format: "%02d ", i + 1) + lamp.shortName)
-                        .font(.lwButton).foregroundStyle(Palette.text).padding(.horizontal, 6)
-                    if lamp.isLight {
-                        button(plot.isOn(item) ? "Off" : "On") {
-                            if plot.isOn(item) { plot.items[i].offIn.insert(plot.shot) } else { plot.items[i].offIn.remove(plot.shot) }
-                        }
-                    }
-                    if showHeight && lamp.isLight {
-                        let z = IsoCanvas.height(item)
-                        button("▼") { if let h = IsoCanvas.stands.last(where: { $0 < z - 0.01 }) { plot.items[i].height = h } }
-                        Text(String(format: "%.1f m", z)).font(.lwData).foregroundStyle(Palette.text).padding(.horizontal, 2)
-                        button("▲") { if let h = IsoCanvas.stands.first(where: { $0 > z + 0.01 }) { plot.items[i].height = h } }
-                    }
-                    button("Remove", danger: true) { plot.items.remove(at: i) }
-                    button("More") { more() }
-                }
-                Rectangle().fill(Palette.rule).frame(height: 1)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        if tab == .mods && mods.count > 1 {
-                            tag(lamp.kind == .diff ? "Diff" : "Mod")
-                            ForEach(mods, id: \.self) { m in
-                                pill(m == "None" ? "Bare" : m, on: item.modifier == m) {
-                                    plot.items[i].modifier = m
-                                    LastModifier.set(lamp.id, m)
-                                }
-                            }
-                            pill("Swap ⇄", on: false, quiet: true) { tab = .swap }
-                        } else {
-                            tag("Swap")
-                            ForEach(QuickLamps.swaps(for: lamp)) { l in
-                                pill(l.shortName, on: l.id == lamp.id) {
-                                    if l.id != lamp.id { plot.items[i].swapHead(to: l) }
-                                }
-                            }
-                            if mods.count > 1 { pill("Mods", on: false, quiet: true) { tab = .mods } }
-                        }
+            HStack(spacing: 4) {
+                Text(String(format: "%02d ", i + 1) + lamp.shortName)
+                    .font(.lwButton).foregroundStyle(Palette.text).lineLimit(1).padding(.horizontal, 6)
+                if lamp.isLight {
+                    button(plot.isOn(item) ? "On" : "Off", lit: plot.isOn(item)) {
+                        if plot.isOn(item) { plot.items[i].offIn.insert(plot.shot) } else { plot.items[i].offIn.remove(plot.shot) }
                     }
                 }
-                .frame(maxWidth: 320)
+                if showHeight && lamp.isLight {
+                    let z = IsoCanvas.height(item)
+                    Menu {
+                        ForEach(IsoCanvas.stands.reversed(), id: \.self) { h in
+                            Button(String(format: "%.1f m", h)) { plot.items[i].height = h }
+                        }
+                    } label: { label(String(format: "%.1f m", z)) }
+                }
+                if lamp.modifiers.count > 1 {
+                    Menu {
+                        Picker(lamp.kind == .diff ? "Diff" : "Modifier", selection: Binding(
+                            get: { plot.items[i].modifier },
+                            set: { plot.items[i].modifier = $0; LastModifier.set(lamp.id, $0) }
+                        )) {
+                            ForEach(lamp.modifiers, id: \.self) { m in Text(m == "None" ? "Bare" : m).tag(m) }
+                        }
+                    } label: { label(item.modifier == "None" ? "Bare" : short(item.modifier)) }
+                }
+                Menu {
+                    ForEach(QuickLamps.swaps(for: lamp).filter { $0.id != lamp.id }) { l in
+                        Button(l.fullName) { plot.items[i].swapHead(to: l) }
+                    }
+                } label: { label("Swap") }
+                Button { plot.items.remove(at: i) } label: {
+                    Image(systemName: "trash").font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Palette.text)
+                        .frame(width: 36, height: 36)
+                        .background(Palette.p3, in: RoundedRectangle(cornerRadius: Radius.chip))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove")
+                button("More") { more() }
             }
             .padding(4)
             .background(Palette.p2, in: RoundedRectangle(cornerRadius: Radius.panel))
@@ -153,26 +150,25 @@ struct LampPop: View {
         }
     }
 
-    private func tag(_ text: String) -> some View {
-        Text(text.uppercased()).font(.lwLabel).foregroundStyle(Palette.quiet).padding(.horizontal, 6)
+    /// "Chimera, medium" reads "Chimera" on the card; the full name is in the menu.
+    private func short(_ m: String) -> String { String(m.split(separator: ",").first ?? Substring(m)) }
+
+    private func label(_ title: String) -> some View {
+        HStack(spacing: 3) {
+            Text(title).lineLimit(1)
+            Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+        }
+        .font(.lwButton).foregroundStyle(Palette.text)
+        .padding(.horizontal, 10).frame(minHeight: 36)
+        .background(Palette.p3, in: RoundedRectangle(cornerRadius: Radius.chip))
     }
 
-    private func button(_ title: String, danger: Bool = false, action: @escaping () -> Void) -> some View {
+    private func button(_ title: String, lit: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title).font(.lwButton)
-                .foregroundStyle(danger ? Color(hex: 0xFF8A7E) : Palette.text)
+                .foregroundStyle(lit ? Palette.p0 : Palette.text)
                 .padding(.horizontal, 10).frame(minHeight: 36)
-                .background(danger ? Color(hex: 0x3A1F1C) : Palette.p3, in: RoundedRectangle(cornerRadius: Radius.chip))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func pill(_ title: String, on: Bool, quiet: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(.lwChip)
-                .foregroundStyle(on ? Palette.p0 : quiet ? Palette.quiet : Palette.text)
-                .padding(.horizontal, 10).frame(minHeight: 34)
-                .background(on ? Palette.gel : quiet ? Color.clear : Palette.p3, in: RoundedRectangle(cornerRadius: Radius.chip))
+                .background(lit ? Palette.gel : Palette.p3, in: RoundedRectangle(cornerRadius: Radius.chip))
         }
         .buttonStyle(.plain)
     }

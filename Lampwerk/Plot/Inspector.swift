@@ -1,49 +1,56 @@
 import SwiftUI
 
-/// The selected lamp: what it is, what it's doing at the talent, and its settings.
+/// The selected lamp's full settings, opened from More on its card. What it does at the talent on one line,
+/// then the few things you change; the name, spread and where the numbers come from fold away under Details.
 struct Inspector: View {
     @Binding var plot: Plot
     let index: Int
     let supply: LightMath.Supply
     @Binding var selected: PlacedLamp.ID?
+    /// Closes the panel and lets go of the lamp.
+    var done: () -> Void = {}
+
+    @State private var details = false
 
     private var item: PlacedLamp { plot.items[index] }
 
     var body: some View {
         if let lamp = item.lamp {
             ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(lamp.fullName).font(.lwTitle).foregroundStyle(Palette.text)
-                            Text(meta(lamp)).font(.lwData).foregroundStyle(Palette.quiet)
+                            Text(String(format: "%02d ", index + 1) + item.title + " · " + lamp.shortName)
+                                .font(.lwTitle).foregroundStyle(Palette.text).lineLimit(1)
+                            Text(summary(lamp)).font(.lwData).foregroundStyle(Palette.quiet)
                         }
                         Spacer()
-                        Button("Close") { selected = nil }.buttonStyle(ActionButtonStyle())
+                        Button("Done") { done() }.buttonStyle(ActionButtonStyle(primary: true))
                     }
-
-                    NameField(placeholder: item.role.title, text: Binding(
-                        get: { plot.items[index].name ?? "" },
-                        set: { plot.items[index].name = $0.isEmpty ? nil : $0 }
-                    ))
 
                     VStack(spacing: 0) {
                         if lamp.isLight {
-                            row("At talent", plot.isOn(item) ? "\(Int(LightMath.lux(from: item, at: plot.talent, in: plot)).formatted()) lx" : "Off")
-                            row("Draw", String(format: "%.1f A", LightMath.amps(item, supply: supply)))
-                            cycleRow("Modifier", item.modifier, lamp.modifiers) { plot.items[index].modifier = $0 }
-                            row("Spread", spreadText(lamp))
-                            if lamp.isLight, LightMath.spread(item) < 300 { diffRow }
-                            cycleRow("Gel", item.gel, Gels.all) { plot.items[index].gel = $0 }
+                            pickerRow("Modifier", item.modifier == "None" ? "Bare" : item.modifier, selection: Binding(
+                                get: { plot.items[index].modifier },
+                                set: { plot.items[index].modifier = $0; LastModifier.set(lamp.id, $0) }
+                            ), options: lamp.modifiers)
+                            if LightMath.spread(item) < 300 { diffRow }
+                            pickerRow("Gel", item.gel, selection: $plot.items[index].gel, options: Gels.all, last: true)
                         }
                         if lamp.kind == .diff { frameRows }
-                        row("Distance", String(format: "%.1f m", item.position.distance(to: plot.talent)), last: true)
                     }
                     .padding(.horizontal, 10)
                     .background(Palette.p0, in: RoundedRectangle(cornerRadius: Radius.card))
                     .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Palette.rule))
 
-                    if lamp.isLight { numbers(lamp) }
+                    if lamp.isLight {
+                        if let range = lamp.cct, range.upperBound > range.lowerBound {
+                            slider("Colour", value: $plot.items[index].cct, in: range, step: 100, text: "\(Int(item.cct)) K")
+                        }
+                        if lamp.isDimmable {
+                            slider("Output", value: $plot.items[index].output, in: 5...100, step: 5, text: "\(Int(item.output))%")
+                        }
+                    }
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 4) {
@@ -51,16 +58,6 @@ struct Inspector: View {
                                 Chip(title: role.title, selected: item.role == role) { plot.items[index].role = role }
                             }
                         }
-                    }
-
-                    if lamp.isLight {
-                        if let range = lamp.cct, range.upperBound > range.lowerBound {
-                            slider("Colour", value: $plot.items[index].cct, in: range, step: 100, text: "\(Int(item.cct)) K")
-                        }
-                        slider("Output", value: $plot.items[index].output, in: 5...100, step: 5,
-                               text: lamp.isDimmable ? "\(Int(item.output))%" : "Fixed")
-                            .disabled(!lamp.isDimmable)
-                            .opacity(lamp.isDimmable ? 1 : 0.35)
                     }
 
                     HStack(spacing: 6) {
@@ -73,12 +70,53 @@ struct Inspector: View {
                         Button("Remove") { remove() }.foregroundStyle(Palette.quiet)
                     }
                     .buttonStyle(ActionButtonStyle())
+
+                    DisclosureGroup(isExpanded: $details) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            NameField(placeholder: item.role.title, text: Binding(
+                                get: { plot.items[index].name ?? "" },
+                                set: { plot.items[index].name = $0.isEmpty ? nil : $0 }
+                            ))
+                            Text(meta(lamp)).font(.lwData).foregroundStyle(Palette.quiet)
+                            if lamp.isLight {
+                                Text("Spread " + spreadText(lamp)).font(.lwData).foregroundStyle(Palette.quiet)
+                                numbers(lamp)
+                            }
+                        }
+                        .padding(.top, 6)
+                    } label: {
+                        Text("Details").font(.lwButton).foregroundStyle(Palette.quiet)
+                    }
+                    .tint(Palette.quiet)
                     .padding(.bottom, 6)
                 }
                 .padding(.horizontal, 16).padding(.top, 12)
             }
             .frame(maxHeight: 330)
         }
+    }
+
+    /// "1,240 lx at talent · 2.4 m · 3.1 A", or "Off in Wide · 2.4 m" for a light that's off.
+    private func summary(_ lamp: Lamp) -> String {
+        let distance = String(format: "%.1f m", item.position.distance(to: plot.talent))
+        guard lamp.isLight else { return lamp.group.rawValue + " · " + distance }
+        guard plot.isOn(item) else { return "Off in \(plot.shot.title) · " + distance }
+        let lux = Int(LightMath.lux(from: item, at: plot.talent, in: plot)).formatted()
+        return "\(lux) lx at talent · \(distance) · " + String(format: "%.1f A", LightMath.amps(item, supply: supply))
+    }
+
+    private func pickerRow(_ label: String, _ value: String, selection: Binding<String>, options: [String], last: Bool = false) -> some View {
+        HStack {
+            Text(label).font(.lwBody).foregroundStyle(Palette.quiet)
+            Spacer()
+            Menu {
+                Picker(label, selection: selection) {
+                    ForEach(options, id: \.self) { Text($0 == "None" && label == "Modifier" ? "Bare" : $0).tag($0) }
+                }
+            } label: { underlined(value) }
+        }
+        .frame(minHeight: 36)
+        .overlay(alignment: .bottom) { if !last { Divider().overlay(Palette.rule) } }
     }
 
     private func meta(_ lamp: Lamp) -> String {
@@ -224,26 +262,6 @@ struct Inspector: View {
         }
         .frame(minHeight: 30)
         .overlay(alignment: .bottom) { if !last { Divider().overlay(Palette.rule) } }
-    }
-
-    /// Tap the value to step to the next option.
-    private func cycleRow(_ label: String, _ value: String, _ options: [String], set: @escaping (String) -> Void) -> some View {
-        HStack {
-            Text(label).font(.lwBody).foregroundStyle(Palette.quiet)
-            Spacer()
-            Button {
-                let i = options.firstIndex(of: value) ?? -1
-                set(options[(i + 1) % options.count])
-            } label: {
-                Text(value).font(.lwValue).foregroundStyle(Palette.text)
-                    .overlay(alignment: .bottom) {
-                        Rectangle().fill(Palette.ruleStrong).frame(height: 1).offset(y: 2)
-                    }
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(minHeight: 30)
-        .overlay(alignment: .bottom) { Divider().overlay(Palette.rule) }
     }
 
     private func slider(_ label: String, value: Binding<Double>, in range: ClosedRange<Double>, step: Double, text: String) -> some View {

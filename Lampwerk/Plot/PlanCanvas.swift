@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The top-down plan. Drag a lamp, the talent or the camera to move it, drag the handle to aim it, pinch to zoom.
-/// Tap a lamp for its card; tap it again to swap it; tap anywhere else to let go, and what you changed stays.
+/// Tap a lamp for its card; tap it again, or anywhere else, to let go. Press and hold a lamp to remove it.
 struct PlanCanvas: View {
     @Binding var plot: Plot
     @Binding var selected: PlacedLamp.ID?
@@ -14,6 +14,8 @@ struct PlanCanvas: View {
     /// Opens the full settings for the picked lamp.
     var more: () -> Void
     var mode: PlanMode = .move
+    /// Off while the drawer shows the lamp's full settings, so only one panel is ever open.
+    var showPop = true
     /// A line for whatever just happened.
     var say: (String) -> Void = { _ in }
 
@@ -21,6 +23,7 @@ struct PlanCanvas: View {
     @State private var stroke: [Point2] = []
 
     @State private var drag: DragState?
+    @State private var hold: Task<Void, Never>?
     @GestureState private var pinch: CGFloat = 1
 
     private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, none, sketch(PlacedLamp.ID?) }
@@ -29,6 +32,8 @@ struct PlanCanvas: View {
         var target: Target
         var offset: Point2
         var moved = false
+        /// A press and hold removed the lamp, so letting go does nothing more.
+        var held = false
     }
 
     /// Distance from a head to its aim handle, in metres.
@@ -54,7 +59,7 @@ struct PlanCanvas: View {
                 return true
             }
             .overlay(alignment: .topLeading) {
-                if let id = selected, drag?.moved != true, let item = plot.items.first(where: { $0.id == id }) {
+                if showPop, let id = selected, drag?.moved != true, let item = plot.items.first(where: { $0.id == id }) {
                     let c = v.point(item.position)
                     LampPop(plot: $plot, id: id, tab: $popTab, more: more)
                         .alignmentGuide(.leading) { d in d.width / 2 }
@@ -180,9 +185,13 @@ struct PlanCanvas: View {
                     default: break
                     }
                     drag = DragState(target: target, offset: offset)
+                    switch target {
+                    case .lamp(let id), .sketch(let id?): holdToRemove(id)
+                    default: break
+                    }
                 }
-                guard var d = drag else { return }
-                if !d.moved, hypot(value.translation.width, value.translation.height) > 4 { d.moved = true }
+                guard var d = drag, !d.held else { return }
+                if !d.moved, hypot(value.translation.width, value.translation.height) > 4 { d.moved = true; hold?.cancel() }
                 drag = d
                 guard d.moved else { return }
 
@@ -207,11 +216,12 @@ struct PlanCanvas: View {
                 }
             }
             .onEnded { value in
+                hold?.cancel()
                 if let d = drag, d.moved, case .sketch = d.target { finishSketch() }
-                if let d = drag, !d.moved {
+                if let d = drag, !d.moved, !d.held {
                     switch d.target {
                     case .lamp(let id), .sketch(let id?):
-                        if selected == id { popTab = popTab == .swap ? .mods : .swap } else { selected = id; popTab = .mods }
+                        selected = selected == id ? nil : id
                     case .none, .sketch(.none):
                         if let armed { drop(armed.id, v.metres(value.startLocation)) } else { selected = nil }
                     case .talent, .camera:
@@ -223,5 +233,21 @@ struct PlanCanvas: View {
                 drag = nil
                 stroke = []
             }
+    }
+
+    /// Press and hold a lamp without moving it to take it off the plan. Undo brings it back.
+    private func holdToRemove(_ id: PlacedLamp.ID) {
+        hold?.cancel()
+        hold = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(550))
+            guard !Task.isCancelled, var d = drag, !d.moved, let i = plot.items.firstIndex(where: { $0.id == id }) else { return }
+            let name = plot.items[i].lamp?.shortName ?? "lamp"
+            d.held = true
+            drag = d
+            if selected == id { selected = nil }
+            plot.items.remove(at: i)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            say("Removed \(name) · Undo bottom left")
+        }
     }
 }

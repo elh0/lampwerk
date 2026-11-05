@@ -8,6 +8,8 @@ struct HomeView: View {
     @State private var showingPower = false
     @State private var beta = false
     @State private var offerClaim = false
+    /// The plot a swipe or a hold asked to delete, waiting for a yes.
+    @State private var deleting: Plot?
     @AppStorage(FoundingTester.dismissedKey) private var cardDismissed = false
 
     var body: some View {
@@ -48,12 +50,19 @@ struct HomeView: View {
                 // One column upright; on its side the plots sit side by side.
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 8)], spacing: 8) {
                     ForEach(store.plots) { plot in
-                        Button { open(plot.id) } label: { PlotRow(plot: plot) }
-                            .buttonStyle(.plain)
+                        // A tap, not a Button, so a sideways swipe isn't read as opening the plot.
+                        PlotRow(plot: plot)
+                            .contentShape(Rectangle())
+                            .onTapGesture { open(plot.id) }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { open(plot.id) }
                             .contextMenu {
                                 Button("Duplicate", systemImage: "plus.square.on.square") { store.duplicate(plot) }
-                                Button("Delete", systemImage: "trash", role: .destructive) { store.delete(plot) }
+                                Button("Delete", systemImage: "trash", role: .destructive) { deleting = plot }
                             }
+                            // Swipe left to clear out old plots without opening them.
+                            .swipeToDelete { deleting = plot }
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.card))
                     }
                 }
                 .padding(12)
@@ -79,6 +88,19 @@ struct HomeView: View {
         .task {
             beta = await FoundingTester.isBetaBuild()
             offerClaim = await FoundingTester.shouldOfferClaim()
+        }
+        .confirmationDialog(
+            "Delete \"\(deleting?.name ?? "")\"?",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            titleVisibility: .visible,
+            presenting: deleting
+        ) { plot in
+            Button("Delete plot", role: .destructive) {
+                withAnimation(.snappy) { store.delete(plot) }
+                deleting = nil
+            }
+        } message: { plot in
+            Text("Its \(plot.items.count) lamps go too. This can't be undone.")
         }
         .sheet(isPresented: $showingPower) {
             PowerSheet { showingPower = false }

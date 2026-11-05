@@ -69,8 +69,13 @@ struct IsoCanvas: View {
     var more: () -> Void
     /// Off for exported pictures.
     var showHandles = true
+    /// Off while the drawer shows the lamp's full settings, so only one panel is ever open.
+    var showPop = true
+    /// A line for whatever just happened.
+    var say: (String) -> Void = { _ in }
 
     @State private var drag: DragState?
+    @State private var hold: Task<Void, Never>?
     @GestureState private var pinch: CGFloat = 1
 
     private enum Target { case lamp(PlacedLamp.ID), talent(Double), camera(Double), wall(Bool), turn(Double, Double), none }
@@ -78,6 +83,8 @@ struct IsoCanvas: View {
     private struct DragState {
         var target: Target
         var moved = false
+        /// A press and hold removed the lamp, so letting go does nothing more.
+        var held = false
         /// Held still while a wall is dragged, so the room doesn't slide out from under your finger.
         var locked: IsoProjection?
     }
@@ -109,7 +116,7 @@ struct IsoCanvas: View {
                     return true
                 }
                 .overlay(alignment: .topLeading) {
-                    if let id = selected, drag?.moved != true, let item = plot.items.first(where: { $0.id == id }) {
+                    if showPop, showHandles, let id = selected, drag?.moved != true, let item = plot.items.first(where: { $0.id == id }) {
                         let c = v.point(item.position, Self.height(item))
                         LampPop(plot: $plot, id: id, tab: $popTab, more: more, showHeight: true)
                             .alignmentGuide(.leading) { d in d.width / 2 }
@@ -353,9 +360,10 @@ struct IsoCanvas: View {
                     var state = DragState(target: target)
                     if case .wall = target { state.locked = v }
                     drag = state
+                    if case .lamp(let id) = target { holdToRemove(id) }
                 }
-                guard var d = drag else { return }
-                if !d.moved, hypot(value.translation.width, value.translation.height) > 4 { d.moved = true }
+                guard var d = drag, !d.held else { return }
+                if !d.moved, hypot(value.translation.width, value.translation.height) > 4 { d.moved = true; hold?.cancel() }
                 drag = d
                 guard d.moved else { return }
                 let view = d.locked ?? v
@@ -389,10 +397,11 @@ struct IsoCanvas: View {
                 }
             }
             .onEnded { value in
-                if let d = drag, !d.moved {
+                hold?.cancel()
+                if let d = drag, !d.moved, !d.held {
                     switch d.target {
                     case .lamp(let id):
-                        if selected == id { popTab = popTab == .swap ? .mods : .swap } else { selected = id; popTab = .mods }
+                        selected = selected == id ? nil : id
                     case .turn, .none:
                         if let armed { drop(armed.id, v.floor(at: value.startLocation)) } else { selected = nil }
                     default:
@@ -401,5 +410,21 @@ struct IsoCanvas: View {
                 }
                 drag = nil
             }
+    }
+
+    /// Press and hold a lamp without moving it to take it off the plan. Undo brings it back.
+    private func holdToRemove(_ id: PlacedLamp.ID) {
+        hold?.cancel()
+        hold = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(550))
+            guard !Task.isCancelled, var d = drag, !d.moved, let i = plot.items.firstIndex(where: { $0.id == id }) else { return }
+            let name = plot.items[i].lamp?.shortName ?? "lamp"
+            d.held = true
+            drag = d
+            if selected == id { selected = nil }
+            plot.items.remove(at: i)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            say("Removed \(name) · Undo bottom left")
+        }
     }
 }
