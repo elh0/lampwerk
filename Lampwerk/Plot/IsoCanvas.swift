@@ -122,7 +122,7 @@ struct IsoCanvas: View {
                 .overlay(alignment: .bottom) {
                 // The card sits docked under the plan, never over the lamp, so the lamp can always be dragged
                 // and the card never runs off the screen. Too wide for the screen, it scrolls sideways.
-                if showPop, cardOpen.wrappedValue, let id = selected, drag?.moved != true, plot.items.contains(where: { $0.id == id }) {
+                if showPop, let id = selected, drag?.moved != true, plot.items.contains(where: { $0.id == id }) {
                     ViewThatFits(in: .horizontal) {
                         LampPop(plot: $plot, id: id, tab: $popTab, more: more, showHeight: true, change: change)
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -411,7 +411,7 @@ struct IsoCanvas: View {
                 if let d = drag, !d.moved, !d.held {
                     switch d.target {
                     case .lamp(let id):
-                        if selected == id { cardOpen.wrappedValue.toggle() } else { selected = id; cardOpen.wrappedValue = false }
+                        selected = selected == id ? nil : id
                     case .turn, .none:
                         if let armed { drop(armed.id, v.floor(at: value.startLocation)) } else { selected = nil }
                     default:

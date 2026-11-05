@@ -11,6 +11,8 @@ struct EditorView: View {
     @State private var plot: Plot?
     @State private var selected: PlacedLamp.ID?
     @State private var showingLibrary = false
+    /// Mirrors the camera monitor's open state, so the plan can sit clear of it.
+    @AppStorage("previewOpen") private var camOpen = true
     /// The picked lamp's small card. A first tap only picks the lamp; tapping it again opens the card.
     @State private var cardOpen = false
     /// Lamps boxed together on the plan.
@@ -92,9 +94,9 @@ struct EditorView: View {
             if old != nil, new == nil, history.count != pickMark, self.plot?.items.contains(where: { $0.id == old }) == true { say("Saved") }
             if new != nil { armed = nil }
             if new == nil { cardOpen = false }
-            if new != nil, old == nil, !cardOpen, !Self.toldAboutCard {
+            if new != nil, old == nil, !Self.toldAboutCard {
                 Self.toldAboutCard = true
-                say("Drag to move · tap again for settings")
+                say("Drag to move · pick a lamp below to swap it")
             }
         }
     }
@@ -120,6 +122,7 @@ struct EditorView: View {
                     showPop: !drawerOpen,
                     say: say
                 )
+                .padding(.top, camOpen ? 110 : 0)
                 .transition(.opacity)
             }
             HStack(alignment: .top) {
@@ -246,7 +249,10 @@ struct EditorView: View {
     private var modeSwitch: some View {
         HStack(spacing: 2) {
             ForEach([PlanMode.sketch, .move], id: \.self) { mode in
-                Button { planMode = mode } label: {
+                Button {
+                    planMode = mode
+                    if mode == .sketch { say("Sketch: draw a circle, box or line to drop lamps fast, then swap them") }
+                } label: {
                     Text(mode == .sketch ? "Sketch" : "Move").font(.lwButton)
                         .foregroundStyle(planMode == mode ? Palette.p0 : Palette.quiet)
                         .padding(.horizontal, 14).frame(minHeight: 36)
@@ -438,7 +444,9 @@ struct EditorView: View {
                 .accessibilityLabel(drawerOpen ? "Close lamps" : "Open lamps")
                 // With a lamp's settings open, the quick row steps aside; Swap on its card does the same job.
                 if !(drawerOpen && selected != nil) {
-                    QuickRow(picked: nil, armed: armed) { lamp in quick(lamp, plot) }
+                    QuickRow(picked: picked(plot.wrappedValue), armed: armed, more: {
+                        if selected != nil { changingLamp = true } else { showingLibrary = true }
+                    }) { lamp in quick(lamp, plot) }
                         .padding(.bottom, 8)
                 }
                 HStack(spacing: 4) {
@@ -575,11 +583,17 @@ struct EditorView: View {
         plot.items.first { $0.id == selected }?.lamp
     }
 
-    /// A quick lamp always adds: it lets go of any picked lamp and waits for a tap on the plan.
-    /// Swapping a head lives on the lamp's card. Tap the same quick lamp again to put it back.
+    /// With a lamp picked (its card shows under the plan), a quick lamp swaps its head. With nothing picked,
+    /// it waits for a tap on the plan to drop it; tap the same quick lamp again to put it back.
     private func quick(_ lamp: Lamp, _ plot: Binding<Plot>) {
-        selected = nil
-        armed = armed?.id == lamp.id ? nil : lamp
+        if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
+            guard plot.wrappedValue.items[i].lampID != lamp.id else { return }
+            plot.wrappedValue.items[i].swapHead(to: lamp)
+            QuickLamps.used(lamp)
+            say("Changed to \(lamp.shortName)")
+        } else {
+            armed = armed?.id == lamp.id ? nil : lamp
+        }
     }
 
     /// Puts a lamp down where you tapped or let go, on the 25 cm grid and clear of the walls, aimed at the talent.

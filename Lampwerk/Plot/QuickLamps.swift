@@ -87,6 +87,8 @@ extension Plot {
 struct QuickRow: View {
     let picked: Lamp?
     let armed: Lamp?
+    /// Opens the full lamp list: to swap the picked lamp, or to pick one to drop.
+    var more: () -> Void = {}
     var tap: (Lamp) -> Void
 
     var body: some View {
@@ -99,6 +101,18 @@ struct QuickRow: View {
                         .draggable(lamp.id) { chip(lamp, on: true) }
                         .accessibilityLabel(picked == nil ? "Drop a \(lamp.shortName)" : "Swap for a \(lamp.shortName)")
                 }
+                Button(action: more) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("More").font(.lwButton).foregroundStyle(Palette.text)
+                        Text("all lamps").font(.lwData).foregroundStyle(Palette.quiet)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(minWidth: 64, minHeight: 46, alignment: .leading)
+                    .background(Palette.p0, in: RoundedRectangle(cornerRadius: Radius.card))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Palette.rule, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(picked == nil ? "All lamps" : "Swap for a lamp from the full list")
             }
             .padding(.horizontal, 16)
         }
