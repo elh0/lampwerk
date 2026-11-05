@@ -26,6 +26,12 @@ struct PlanCanvas: View {
 
     @State private var drag: DragState?
     @State private var hold: Task<Void, Never>?
+    /// Lamps boxed together by dragging across empty floor, plus the talent and camera if the box took them in.
+    @State private var group: Set<PlacedLamp.ID> = []
+    @State private var groupTalent = false
+    @State private var groupCamera = false
+    /// The box being dragged out, in metres.
+    @State private var lasso: (Point2, Point2)?
     @GestureState private var pinch: CGFloat = 1
 
     private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, wall(Bool), none, sketch(PlacedLamp.ID?) }
@@ -36,6 +42,11 @@ struct PlanCanvas: View {
         var moved = false
         /// Held still while a wall is dragged, so the room doesn't slide out from under your finger.
         var locked: PlanViewport?
+        /// Where everything in the group stood when the drag began.
+        var starts: [PlacedLamp.ID: Point2] = [:]
+        var startTalent = Point2(x: 0, y: 0)
+        var startCamera = Point2(x: 0, y: 0)
+        var from = Point2(x: 0, y: 0)
         /// A press and hold removed the lamp, so letting go does nothing more.
         var held = false
     }
@@ -51,6 +62,7 @@ struct PlanCanvas: View {
                 PlanDrawing.draw(plot, in: ctx, viewport: v, options: .init(selected: selected))
                 drawSelection(ctx, v)
                 if mode == .move { drawWallHandles(ctx, v) }
+                drawGroup(ctx, v)
                 if stroke.count > 1 {
                     var path = Path()
                     path.addLines(stroke.map { v.point($0) })
@@ -203,8 +215,14 @@ struct PlanCanvas: View {
                     }
                     drag = DragState(target: target, offset: offset)
                     if case .wall = target { drag?.locked = v }
+                    if !isGrouped(target) { clearGroup() } else {
+                        drag?.from = start
+                        drag?.starts = Dictionary(uniqueKeysWithValues: plot.items.filter { group.contains($0.id) }.map { ($0.id, $0.position) })
+                        drag?.startTalent = plot.talent
+                        drag?.startCamera = plot.camera
+                    }
                     switch target {
-                    case .lamp(let id), .sketch(let id?): holdToRemove(id)
+                    case .lamp(let id), .sketch(let id?): if group.isEmpty { holdToRemove(id) }
                     default: break
                     }
                 }
@@ -212,6 +230,20 @@ struct PlanCanvas: View {
                 if !d.moved, hypot(value.translation.width, value.translation.height) > 4 { d.moved = true; hold?.cancel() }
                 drag = d
                 guard d.moved else { return }
+
+                // Something in the group: everything boxed moves together.
+                if !group.isEmpty || groupTalent || groupCamera, isGrouped(d.target) {
+                    let dx = p.x - d.from.x, dy = p.y - d.from.y
+                    for (id, s) in d.starts {
+                        if let i = plot.items.firstIndex(where: { $0.id == id }) {
+                            plot.items[i].x = s.x + dx
+                            plot.items[i].y = s.y + dy
+                        }
+                    }
+                    if groupTalent { plot.talent = inRoom(Point2(x: d.startTalent.x + dx, y: d.startTalent.y + dy)) }
+                    if groupCamera { plot.camera = inRoom(Point2(x: d.startCamera.x + dx, y: d.startCamera.y + dy)) }
+                    return
+                }
 
                 switch d.target {
                 case .lamp(let id):
@@ -241,18 +273,20 @@ struct PlanCanvas: View {
                     if stroke.isEmpty { stroke = [v.metres(value.startLocation)] }
                     stroke.append(p)
                 case .none:
-                    break
+                    // Drag across empty floor to box lamps together.
+                    if mode == .move, armed == nil { lasso = (v.metres(value.startLocation), p) }
                 }
             }
             .onEnded { value in
                 hold?.cancel()
+                if let box = lasso { finishLasso(box) }
                 if let d = drag, d.moved, case .sketch = d.target { finishSketch() }
                 if let d = drag, !d.moved, !d.held {
                     switch d.target {
                     case .lamp(let id), .sketch(let id?):
                         if selected == id { cardOpen.wrappedValue.toggle() } else { selected = id; cardOpen.wrappedValue = false }
                     case .none, .sketch(.none):
-                        if let armed { drop(armed.id, v.metres(value.startLocation)) } else { selected = nil }
+                        if let armed { drop(armed.id, v.metres(value.startLocation)) } else { selected = nil; clearGroup() }
                     case .talent, .camera, .wall:
                         selected = nil
                     case .aim:
@@ -292,6 +326,58 @@ struct PlanCanvas: View {
         }
         if let d = drag, case .wall = d.target {
             PlanDrawing.label(String(format: "%.2g × %.2g M", plot.roomWidth, plot.roomDepth), at: CGPoint(x: right.x - 40, y: bottom.y + 18), ctx)
+        }
+    }
+
+    private func isGrouped(_ t: Target) -> Bool {
+        switch t {
+        case .lamp(let id): return group.contains(id)
+        case .talent: return groupTalent
+        case .camera: return groupCamera
+        default: return false
+        }
+    }
+
+    private func clearGroup() {
+        group = []
+        groupTalent = false
+        groupCamera = false
+    }
+
+    /// Whatever the box took in becomes the group. One lamp is just a pick.
+    private func finishLasso(_ box: (Point2, Point2)) {
+        lasso = nil
+        let minX = min(box.0.x, box.1.x), maxX = max(box.0.x, box.1.x)
+        let minY = min(box.0.y, box.1.y), maxY = max(box.0.y, box.1.y)
+        func inside(_ p: Point2) -> Bool { p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY }
+        let ids = plot.items.filter { inside($0.position) }.map(\.id)
+        let t = inside(plot.talent), c = inside(plot.camera)
+        if ids.count == 1 && !t && !c {
+            selected = ids[0]
+            return
+        }
+        selected = nil
+        group = Set(ids)
+        groupTalent = t
+        groupCamera = c
+        let n = ids.count + (t ? 1 : 0) + (c ? 1 : 0)
+        if n > 0 { say("\(n) picked · drag any of them to move together") }
+    }
+
+    /// The box while you drag it, and a ring on everything in the group.
+    private func drawGroup(_ ctx: GraphicsContext, _ v: PlanViewport) {
+        if let box = lasso {
+            let a = v.point(box.0), b = v.point(box.1)
+            let r = Path(CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y)))
+            ctx.fill(r, with: .color(Palette.gel.opacity(0.06)))
+            ctx.stroke(r, with: .color(Palette.gel), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        }
+        var rings: [Point2] = plot.items.filter { group.contains($0.id) }.map(\.position)
+        if groupTalent { rings.append(plot.talent) }
+        if groupCamera { rings.append(plot.camera) }
+        for p in rings {
+            let c = v.point(p), r: CGFloat = 18
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(Palette.gel), lineWidth: 1.2)
         }
     }
 }

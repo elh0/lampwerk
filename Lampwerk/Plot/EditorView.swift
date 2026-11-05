@@ -131,6 +131,7 @@ struct EditorView: View {
                         }
                         .buttonStyle(ActionButtonStyle())
                     }
+                    CameraPreview(plot: plot.wrappedValue)
                 }
             }
             .padding(.horizontal, 12).padding(.top, 8)
