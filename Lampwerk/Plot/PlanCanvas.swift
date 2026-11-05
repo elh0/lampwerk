@@ -7,6 +7,8 @@ struct PlanCanvas: View {
     @Binding var selected: PlacedLamp.ID?
     @Binding var zoom: CGFloat
     @Binding var popTab: LampPop.Tab
+    /// The lamp's card: a first tap only picks the lamp (so it can be dragged); a second tap opens this.
+    var cardOpen: Binding<Bool> = .constant(false)
     /// A quick lamp waiting to be dropped with the next tap on empty floor.
     var armed: Lamp?
     /// Puts a lamp (by library id) down at a point on the plan.
@@ -58,14 +60,19 @@ struct PlanCanvas: View {
                 drop(id, v.metres(location))
                 return true
             }
-            .overlay(alignment: .topLeading) {
-                if showPop, let id = selected, drag?.moved != true, let item = plot.items.first(where: { $0.id == id }) {
-                    let c = v.point(item.position)
-                    LampPop(plot: $plot, id: id, tab: $popTab, more: more)
-                        .alignmentGuide(.leading) { d in d.width / 2 }
-                        .alignmentGuide(.top) { d in d.height + 30 }
-                        .offset(x: min(max(c.x, 170), max(170, geo.size.width - 170)), y: max(c.y, 140))
-                        .transition(.opacity)
+            .overlay(alignment: .bottom) {
+                // The card sits docked under the plan, never over the lamp, so the lamp can always be dragged
+                // and the card never runs off the screen. Too wide for the screen, it scrolls sideways.
+                if showPop, cardOpen.wrappedValue, let id = selected, drag?.moved != true, plot.items.contains(where: { $0.id == id }) {
+                    ViewThatFits(in: .horizontal) {
+                        LampPop(plot: $plot, id: id, tab: $popTab, more: more)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            LampPop(plot: $plot, id: id, tab: $popTab, more: more)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 70)
+                    .transition(.opacity)
                 }
             }
             .overlay(alignment: .topLeading) {
@@ -221,7 +228,7 @@ struct PlanCanvas: View {
                 if let d = drag, !d.moved, !d.held {
                     switch d.target {
                     case .lamp(let id), .sketch(let id?):
-                        selected = selected == id ? nil : id
+                        if selected == id { cardOpen.wrappedValue.toggle() } else { selected = id; cardOpen.wrappedValue = false }
                     case .none, .sketch(.none):
                         if let armed { drop(armed.id, v.metres(value.startLocation)) } else { selected = nil }
                     case .talent, .camera:

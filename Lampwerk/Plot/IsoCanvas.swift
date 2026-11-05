@@ -62,6 +62,8 @@ struct IsoCanvas: View {
     @Binding var selected: PlacedLamp.ID?
     @Binding var zoom: CGFloat
     @Binding var popTab: LampPop.Tab
+    /// The lamp's card: a first tap only picks the lamp (so it can be dragged); a second tap opens this.
+    var cardOpen: Binding<Bool> = .constant(false)
     @Binding var yaw: Double
     @Binding var pitch: Double
     var armed: Lamp?
@@ -115,15 +117,21 @@ struct IsoCanvas: View {
                     drop(id, v.floor(at: location))
                     return true
                 }
-                .overlay(alignment: .topLeading) {
-                    if showPop, showHandles, let id = selected, drag?.moved != true, let item = plot.items.first(where: { $0.id == id }) {
-                        let c = v.point(item.position, Self.height(item))
+                .overlay(alignment: .bottom) {
+                // The card sits docked under the plan, never over the lamp, so the lamp can always be dragged
+                // and the card never runs off the screen. Too wide for the screen, it scrolls sideways.
+                if showPop, cardOpen.wrappedValue, let id = selected, drag?.moved != true, plot.items.contains(where: { $0.id == id }) {
+                    ViewThatFits(in: .horizontal) {
                         LampPop(plot: $plot, id: id, tab: $popTab, more: more, showHeight: true)
-                            .alignmentGuide(.leading) { d in d.width / 2 }
-                            .alignmentGuide(.top) { d in d.height + 30 }
-                            .offset(x: min(max(c.x, 170), max(170, geo.size.width - 170)), y: max(c.y, 140))
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            LampPop(plot: $plot, id: id, tab: $popTab, more: more, showHeight: true)
+                        }
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 70)
+                    .transition(.opacity)
                 }
+            }
                 .simultaneousGesture(
                     MagnifyGesture()
                         .updating($pinch) { value, state, _ in state = value.magnification }
@@ -401,7 +409,7 @@ struct IsoCanvas: View {
                 if let d = drag, !d.moved, !d.held {
                     switch d.target {
                     case .lamp(let id):
-                        selected = selected == id ? nil : id
+                        if selected == id { cardOpen.wrappedValue.toggle() } else { selected = id; cardOpen.wrappedValue = false }
                     case .turn, .none:
                         if let armed { drop(armed.id, v.floor(at: value.startLocation)) } else { selected = nil }
                     default:

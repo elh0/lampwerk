@@ -3,12 +3,16 @@ import SwiftUI
 /// One plot: the plan fills the screen, with one drawer for setups, lamps and the selected lamp.
 struct EditorView: View {
     @Environment(PlotStore.self) private var store
+    /// The "tap again for settings" line shows once a launch.
+    @MainActor private static var toldAboutCard = false
     let plotID: Plot.ID
     var close: () -> Void
 
     @State private var plot: Plot?
     @State private var selected: PlacedLamp.ID?
     @State private var showingLibrary = false
+    /// The picked lamp's small card. A first tap only picks the lamp; tapping it again opens the card.
+    @State private var cardOpen = false
     @State private var zoom: CGFloat = 1
     @State private var showingAR = false
     @State private var confirmingAR = false
@@ -28,7 +32,7 @@ struct EditorView: View {
     @State private var pickMark = 0
     @State private var toast: String?
     /// Sketch draws lamps by shape and aims them; Move drags.
-    @State private var planMode: PlanMode = .sketch
+    @State private var planMode: PlanMode = .move
     /// Top down or 3D, and which way the 3D view is turned.
     @State private var show3D = false
     @State private var yaw = IsoProjection.defaultYaw
@@ -81,6 +85,11 @@ struct EditorView: View {
             if new != nil, old == nil { pickMark = history.count }
             if old != nil, new == nil, history.count != pickMark, self.plot?.items.contains(where: { $0.id == old }) == true { say("Saved") }
             if new != nil { armed = nil }
+            if new == nil { cardOpen = false }
+            if new != nil, old == nil, !cardOpen, !Self.toldAboutCard {
+                Self.toldAboutCard = true
+                say("Drag to move · tap again for settings")
+            }
         }
     }
 
@@ -89,7 +98,7 @@ struct EditorView: View {
         ZStack(alignment: .top) {
             if show3D {
                 IsoCanvas(
-                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, yaw: $yaw, pitch: $pitch, armed: armed,
+                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, cardOpen: $cardOpen, yaw: $yaw, pitch: $pitch, armed: armed,
                     drop: { id, at in drop(id, at: at, plot) },
                     more: { drawerOpen = true },
                     showPop: !drawerOpen,
@@ -98,7 +107,7 @@ struct EditorView: View {
                 .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.94)), removal: .opacity))
             } else {
                 PlanCanvas(
-                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, armed: armed,
+                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, cardOpen: $cardOpen, armed: armed,
                     drop: { id, at in drop(id, at: at, plot) },
                     more: { drawerOpen = true },
                     mode: planMode,
@@ -224,7 +233,9 @@ struct EditorView: View {
     private func sheets(_ content: some View, _ plot: Binding<Plot>) -> some View {
         content.sheet(isPresented: $showingLibrary) {
             LibrarySheet { lamp in
-                add(lamp, to: plot)
+                // Pick from the list, then tap the plan where it goes.
+                selected = nil
+                armed = lamp
                 showingLibrary = false
             }
             .readableWidth()
@@ -371,6 +382,11 @@ struct EditorView: View {
                     ForEach(Shot.allCases, id: \.self) { shot in
                         Chip(title: shot.title, selected: plot.wrappedValue.shot == shot) {
                             plot.wrappedValue.shot = shot
+                            // Setups only switch lamps on and off, so say what changed.
+                            var p = plot.wrappedValue
+                            p.shot = shot
+                            let lights = p.items.filter { $0.lamp?.isLight == true }.count
+                            say("\(shot.title) setup · \(p.lightsOn.count) of \(lights) lamps on")
                         }
                     }
                     Spacer(minLength: 8)
@@ -527,16 +543,6 @@ struct EditorView: View {
         if plot.items.contains(where: { $0.role == .key }) && lamp.isLight { item.role = .fill }
         if let m = LastModifier.get(lamp.id), lamp.modifiers.contains(m) { item.modifier = m }
         return item
-    }
-
-    /// Drops a new lamp up and to the left of the talent, aimed at them, and selects it.
-    private func add(_ lamp: Lamp, to plot: Binding<Plot>) {
-        let t = plot.wrappedValue.talent
-        let step = Double(plot.wrappedValue.items.count % 5) * 0.4
-        let x = max(0.3, t.x - 1.6 + step), y = max(0.3, t.y - 1.6)
-        let item = newItem(lamp, at: Point2(x: x, y: y), in: plot.wrappedValue)
-        plot.wrappedValue.items.append(item)
-        selected = item.id
     }
 }
 
