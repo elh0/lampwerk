@@ -1,4 +1,6 @@
+import ModelIO
 import SceneKit
+import SceneKit.ModelIO
 import UIKit
 
 /// The stand-in for the camera preview: a neutral head and shoulders sculpted in code, so it carries no
@@ -12,6 +14,7 @@ enum StandIn {
 
     /// Head, neck and shoulders in one node, already in the clay material.
     static func node(_ style: Style = .planes) -> SCNNode {
+        if style == .sculpt, let scan = scanNode() { return scan }
         let root = SCNNode()
         let head = SCNNode(geometry: style == .planes ? PlanarHead.geometry() : headGeometry())
         head.position = SCNVector3(0, style == .planes ? 0.2 : 0.19, 0)
@@ -45,6 +48,22 @@ enum StandIn {
         }
         // A slight turn of the head, so the face isn't dead square to the lens.
         head.eulerAngles.y = -0.12
+        return root
+    }
+
+    /// The sculpt: the Lee Perry-Smith head scan (Infinite-Realities, CC BY 3.0, credited in About),
+    /// head and shoulders, in the same matte clay. Eyes sit 0.2 m above the node's origin, like the planar head.
+    private static func scanNode() -> SCNNode? {
+        guard let url = Bundle.main.url(forResource: "StandInScan", withExtension: "obj") else { return nil }
+        let asset = MDLAsset(url: url)
+        guard let mesh = asset.object(at: 0) as? MDLMesh else { return nil }
+        let node = SCNNode(mdlObject: mesh)
+        let clay = material()
+        node.geometry?.materials = [clay]
+        node.castsShadow = true
+        node.position = SCNVector3(0, 0.2, 0)
+        let root = SCNNode()
+        root.addChildNode(node)
         return root
     }
 

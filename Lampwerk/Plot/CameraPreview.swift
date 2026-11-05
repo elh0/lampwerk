@@ -35,7 +35,7 @@ struct CameraPreview: View {
     @ViewBuilder private var monitor: some View {
         let width: CGFloat = large ? 220 : 144
         VStack(spacing: 0) {
-            PreviewScene(plot: plot, subject: .planes, zoom: zoom * pinch)
+            PreviewScene(plot: plot, subject: StandIn.Style(rawValue: subject) ?? .planes, zoom: zoom * pinch)
                 .frame(width: width, height: width * 9 / 16)
                 .overlay { FrameLines().stroke(Palette.text.opacity(0.55), lineWidth: 1).padding(6).allowsHitTesting(false) }
                 // The 3D view ignores touches; this catches the tap so it never falls through to the plan.
@@ -49,8 +49,16 @@ struct CameraPreview: View {
             HStack {
                 Text("CAM").foregroundStyle(Palette.quiet)
                 Spacer()
-                // The smooth sculpt comes back as an option once a proper scanned head is in.
-                if large { Text("PLANES").foregroundStyle(Palette.quiet); Spacer() }
+                // Planes or the scanned sculpt: tap the word to swap the stand-in.
+                if large {
+                    Button(subject == StandIn.Style.sculpt.rawValue ? "SCULPT" : "PLANES") {
+                        subject = subject == StandIn.Style.sculpt.rawValue ? StandIn.Style.planes.rawValue : StandIn.Style.sculpt.rawValue
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Palette.text)
+                    .accessibilityLabel("Stand-in. Tap to swap planes and sculpt.")
+                    Spacer()
+                }
                 Text("\(Int(CameraPreview.keyKelvin(plot))) K").foregroundStyle(Palette.quiet)
                 Button { withAnimation(.snappy(duration: 0.2)) { open = false; large = false } } label: {
                     Image(systemName: "xmark").font(.system(size: 9, weight: .bold))

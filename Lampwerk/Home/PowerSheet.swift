@@ -44,6 +44,11 @@ struct PowerSheet: View {
                         }
                     }
                     Text(hint).font(.lwChip).foregroundStyle(Palette.quiet).padding(.top, 4)
+
+                    Caps("Credits").padding(.top, 24)
+                    Text("Camera view head scan: Lee Perry-Smith, by Infinite-Realities, licensed CC BY 3.0 (creativecommons.org/licenses/by/3.0). Converted and re-coloured for Lampwerk.\nIBM Plex fonts: SIL Open Font License.")
+                        .font(.lwChip).foregroundStyle(Palette.quiet)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
