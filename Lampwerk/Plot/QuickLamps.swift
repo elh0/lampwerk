@@ -143,6 +143,9 @@ struct LampPop: View {
     var showHeight = false
     /// Opens the lamp list to put a different head in its place.
     var change: () -> Void = {}
+    /// How many times the swap hint has shown; it stops after a few.
+    @AppStorage("swapHintCount") private var hintCount = 0
+    @State private var showHint = false
 
     var body: some View {
         if let i = plot.items.firstIndex(where: { $0.id == id }), let lamp = plot.items[i].lamp {
@@ -150,11 +153,17 @@ struct LampPop: View {
             HStack(spacing: 4) {
                 // The name opens the lamp list, to change the head.
                 Button(action: change) {
-                    HStack(spacing: 3) {
-                        Text(String(format: "%02d ", i + 1) + lamp.shortName).lineLimit(1)
-                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Palette.quiet)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 3) {
+                            Text(String(format: "%02d ", i + 1) + lamp.shortName).lineLimit(1)
+                            Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Palette.quiet)
+                        }
+                        .font(.lwButton).foregroundStyle(Palette.text)
+                        // The first few times: how to change it.
+                        if showHint {
+                            Text("tap a lamp below to swap").font(.lwLabel).foregroundStyle(Palette.quiet).lineLimit(1)
+                        }
                     }
-                    .font(.lwButton).foregroundStyle(Palette.text)
                     .padding(.horizontal, 8).frame(minHeight: 36)
                 }
                 .buttonStyle(.plain)
@@ -212,6 +221,10 @@ struct LampPop: View {
             .overlay(RoundedRectangle(cornerRadius: Radius.panel).strokeBorder(Palette.ruleStrong))
             .shadow(color: .black.opacity(0.45), radius: 14, y: 8)
             .fixedSize()
+            .onAppear {
+                showHint = hintCount < 5
+                hintCount += 1
+            }
         }
     }
 
