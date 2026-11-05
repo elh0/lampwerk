@@ -2,6 +2,7 @@ import SwiftUI
 
 /// The lamp library: search, browse by group, tap to drop on the plan.
 struct LibrarySheet: View {
+    var title = "Lamps"
     var pick: (Lamp) -> Void
     @State private var query = ""
     @State private var group: Lamp.Group?
@@ -16,7 +17,7 @@ struct LibrarySheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Caps("Lamps")
+                Caps(title)
                 Spacer()
                 Text("(\(lamps.count))").font(.lwData).foregroundStyle(Palette.quiet)
             }

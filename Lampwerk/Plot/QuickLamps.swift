@@ -116,8 +116,8 @@ struct QuickRow: View {
     }
 }
 
-/// The small card over a tapped lamp, the only thing a tap opens: on or off, its modifier, swap the head,
-/// remove, and More for everything else. One row, so it never covers the plan.
+/// The lamp's small card, docked under the plan: its name (tap to change the head), on or off, its modifier,
+/// diffusion, and ••• for everything else. Delete lives with Undo, bottom left.
 struct LampPop: View {
     enum Tab { case mods, swap }
 
@@ -127,13 +127,24 @@ struct LampPop: View {
     var more: () -> Void
     /// In 3D: raise and lower the head through stand heights.
     var showHeight = false
+    /// Opens the lamp list to put a different head in its place.
+    var change: () -> Void = {}
 
     var body: some View {
         if let i = plot.items.firstIndex(where: { $0.id == id }), let lamp = plot.items[i].lamp {
             let item = plot.items[i]
             HStack(spacing: 4) {
-                Text(String(format: "%02d ", i + 1) + lamp.shortName)
-                    .font(.lwButton).foregroundStyle(Palette.text).lineLimit(1).padding(.horizontal, 4)
+                // The name opens the lamp list, to change the head.
+                Button(action: change) {
+                    HStack(spacing: 3) {
+                        Text(String(format: "%02d ", i + 1) + lamp.shortName).lineLimit(1)
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Palette.quiet)
+                    }
+                    .font(.lwButton).foregroundStyle(Palette.text)
+                    .padding(.horizontal, 8).frame(minHeight: 36)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Change lamp, now \(lamp.fullName)")
                 if lamp.isLight {
                     button(plot.isOn(item) ? "On" : "Off", lit: plot.isOn(item)) {
                         if plot.isOn(item) { plot.items[i].offIn.insert(plot.shot) } else { plot.items[i].offIn.remove(plot.shot) }
@@ -173,19 +184,6 @@ struct LampPop: View {
                         button("+ Diff") { plot.addDiff(before: i) }
                     }
                 }
-                Menu {
-                    ForEach(QuickLamps.swaps(for: lamp).filter { $0.id != lamp.id }) { l in
-                        Button(l.fullName) { plot.items[i].swapHead(to: l) }
-                    }
-                } label: { label("Swap") }
-                Button { plot.items.remove(at: i) } label: {
-                    Image(systemName: "trash").font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Palette.text)
-                        .frame(width: 36, height: 36)
-                        .background(Palette.p3, in: RoundedRectangle(cornerRadius: Radius.chip))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Remove")
                 Button { more() } label: {
                     Image(systemName: "ellipsis").font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Palette.text)

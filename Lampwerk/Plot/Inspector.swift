@@ -9,6 +9,8 @@ struct Inspector: View {
     @Binding var selected: PlacedLamp.ID?
     /// Closes the panel and lets go of the lamp.
     var done: () -> Void = {}
+    /// Opens the lamp list to change this head.
+    var change: () -> Void = {}
 
     @State private var details = false
 
@@ -25,6 +27,7 @@ struct Inspector: View {
                             Text(summary(lamp)).font(.lwData).foregroundStyle(Palette.quiet)
                         }
                         Spacer()
+                        Button("Change") { change() }.buttonStyle(ActionButtonStyle())
                         Button("Done") { done() }.buttonStyle(ActionButtonStyle(primary: true))
                     }
 

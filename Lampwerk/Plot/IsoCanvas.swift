@@ -64,6 +64,8 @@ struct IsoCanvas: View {
     @Binding var popTab: LampPop.Tab
     /// The lamp's card: a first tap only picks the lamp (so it can be dragged); a second tap opens this.
     var cardOpen: Binding<Bool> = .constant(false)
+    /// Opens the lamp list to change the picked lamp's head.
+    var change: () -> Void = {}
     @Binding var yaw: Double
     @Binding var pitch: Double
     var armed: Lamp?
@@ -122,9 +124,9 @@ struct IsoCanvas: View {
                 // and the card never runs off the screen. Too wide for the screen, it scrolls sideways.
                 if showPop, cardOpen.wrappedValue, let id = selected, drag?.moved != true, plot.items.contains(where: { $0.id == id }) {
                     ViewThatFits(in: .horizontal) {
-                        LampPop(plot: $plot, id: id, tab: $popTab, more: more, showHeight: true)
+                        LampPop(plot: $plot, id: id, tab: $popTab, more: more, showHeight: true, change: change)
                         ScrollView(.horizontal, showsIndicators: false) {
-                            LampPop(plot: $plot, id: id, tab: $popTab, more: more, showHeight: true)
+                            LampPop(plot: $plot, id: id, tab: $popTab, more: more, showHeight: true, change: change)
                         }
                     }
                     .padding(.horizontal, 12)

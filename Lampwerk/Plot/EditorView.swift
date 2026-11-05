@@ -13,6 +13,10 @@ struct EditorView: View {
     @State private var showingLibrary = false
     /// The picked lamp's small card. A first tap only picks the lamp; tapping it again opens the card.
     @State private var cardOpen = false
+    /// Lamps boxed together on the plan.
+    @State private var group: Set<PlacedLamp.ID> = []
+    /// The lamp list is open to change the picked lamp's head.
+    @State private var changingLamp = false
     @State private var zoom: CGFloat = 1
     @State private var showingAR = false
     @State private var confirmingAR = false
@@ -98,7 +102,7 @@ struct EditorView: View {
         ZStack(alignment: .top) {
             if show3D {
                 IsoCanvas(
-                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, cardOpen: $cardOpen, yaw: $yaw, pitch: $pitch, armed: armed,
+                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, cardOpen: $cardOpen, change: { changingLamp = true }, yaw: $yaw, pitch: $pitch, armed: armed,
                     drop: { id, at in drop(id, at: at, plot) },
                     more: { drawerOpen = true },
                     showPop: !drawerOpen,
@@ -107,7 +111,7 @@ struct EditorView: View {
                 .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.94)), removal: .opacity))
             } else {
                 PlanCanvas(
-                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, cardOpen: $cardOpen, armed: armed,
+                    plot: plot, selected: $selected, zoom: $zoom, popTab: $popTab, cardOpen: $cardOpen, change: { changingLamp = true }, group: $group, armed: armed,
                     drop: { id, at in drop(id, at: at, plot) },
                     more: { drawerOpen = true },
                     mode: planMode,
@@ -149,10 +153,16 @@ struct EditorView: View {
         .frame(maxHeight: .infinity)
         .clipped()
         .overlay(alignment: .bottomLeading) {
-            HStack(spacing: 8) {
-                roundButton("arrow.uturn.backward", "Undo", enabled: history.canUndo) { step(back: true, plot) }
-                roundButton("arrow.uturn.forward", "Redo", enabled: history.canRedo) { step(back: false, plot) }
+            // One small control panel: undo, redo, and delete whatever is picked (one lamp or a boxed group).
+            HStack(spacing: 0) {
+                panelButton("arrow.uturn.backward", "Undo", enabled: history.canUndo) { step(back: true, plot) }
+                panelButton("arrow.uturn.forward", "Redo", enabled: history.canRedo) { step(back: false, plot) }
+                Rectangle().fill(Palette.rule).frame(width: 1, height: 26)
+                panelButton("trash", deleteLabel, enabled: selected != nil || !group.isEmpty) { deletePicked(plot) }
             }
+            .padding(.horizontal, 4)
+            .background(Palette.p2, in: Capsule())
+            .overlay(Capsule().strokeBorder(Palette.ruleStrong))
             .padding(12)
         }
         .overlay(alignment: .bottomTrailing) { viewSwitch.padding(12) }
@@ -164,6 +174,31 @@ struct EditorView: View {
             try? await Task.sleep(for: .seconds(2))
             toast = nil
         }
+    }
+
+    private var deleteLabel: String { group.count > 1 ? "Delete \(group.count) lamps" : "Delete lamp" }
+
+    private func panelButton(_ icon: String, _ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Palette.text)
+                .frame(width: 46, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.3)
+        .accessibilityLabel(label)
+    }
+
+    /// Takes off the picked lamp, or every lamp in the boxed group. Undo brings them back.
+    private func deletePicked(_ plot: Binding<Plot>) {
+        let ids = group.isEmpty ? Set([selected].compactMap { $0 }) : group
+        guard !ids.isEmpty else { return }
+        plot.wrappedValue.items.removeAll { ids.contains($0.id) }
+        selected = nil
+        group = []
+        say(ids.count == 1 ? "Deleted · Undo bottom left" : "Deleted \(ids.count) lamps · Undo bottom left")
     }
 
     private func roundButton(_ icon: String, _ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -232,7 +267,20 @@ struct EditorView: View {
 
     /// The editor's sheets and covers, shared by both layouts.
     private func sheets(_ content: some View, _ plot: Binding<Plot>) -> some View {
-        content.sheet(isPresented: $showingLibrary) {
+        content.sheet(isPresented: $changingLamp) {
+            LibrarySheet(title: "Change lamp") { lamp in
+                if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
+                    plot.wrappedValue.items[i].swapHead(to: lamp)
+                    QuickLamps.used(lamp)
+                    say("Changed to \(lamp.shortName)")
+                }
+                changingLamp = false
+            }
+            .readableWidth()
+            .presentationDetents([.medium, .large])
+            .presentationBackground(Palette.p1)
+        }
+        .sheet(isPresented: $showingLibrary) {
             LibrarySheet { lamp in
                 // Pick from the list, then tap the plan where it goes.
                 selected = nil
@@ -319,7 +367,7 @@ struct EditorView: View {
                 Button { showingSpace = true } label: {
                     HStack(spacing: 4) {
                         Text(String(format: "%.1f × %.1f m", plot.roomWidth, plot.roomDepth))
-                        Text(plot.floorPlan != nil ? "· plan" : "· add floor plan")
+                        if plot.floorPlan != nil { Text("· plan") }
                         Image(systemName: "chevron.down").font(.system(size: 9))
                     }
                     .font(.lwData).foregroundStyle(Palette.quiet)
@@ -477,10 +525,10 @@ struct EditorView: View {
 
     @ViewBuilder private func inspector(_ plot: Binding<Plot>) -> some View {
         if let id = selected, let i = plot.wrappedValue.items.firstIndex(where: { $0.id == id }) {
-            Inspector(plot: plot, index: i, supply: store.supply, selected: $selected) {
+            Inspector(plot: plot, index: i, supply: store.supply, selected: $selected, done: {
                 selected = nil
                 drawerOpen = false
-            }
+            }, change: { changingLamp = true })
         }
     }
 

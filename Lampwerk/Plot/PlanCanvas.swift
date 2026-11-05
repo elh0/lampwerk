@@ -9,6 +9,10 @@ struct PlanCanvas: View {
     @Binding var popTab: LampPop.Tab
     /// The lamp's card: a first tap only picks the lamp (so it can be dragged); a second tap opens this.
     var cardOpen: Binding<Bool> = .constant(false)
+    /// Opens the lamp list to change the picked lamp's head.
+    var change: () -> Void = {}
+    /// Lamps boxed together by dragging across empty floor; the editor's Delete takes them all.
+    @Binding var group: Set<PlacedLamp.ID>
     /// A quick lamp waiting to be dropped with the next tap on empty floor.
     var armed: Lamp?
     /// Puts a lamp (by library id) down at a point on the plan.
@@ -27,14 +31,14 @@ struct PlanCanvas: View {
     @State private var drag: DragState?
     @State private var hold: Task<Void, Never>?
     /// Lamps boxed together by dragging across empty floor, plus the talent and camera if the box took them in.
-    @State private var group: Set<PlacedLamp.ID> = []
     @State private var groupTalent = false
     @State private var groupCamera = false
     /// The box being dragged out, in metres.
     @State private var lasso: (Point2, Point2)?
     @GestureState private var pinch: CGFloat = 1
 
-    private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, wall(Bool), none, sketch(PlacedLamp.ID?) }
+    private enum Wall { case left, right, top, bottom }
+    private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, wall(Wall), none, sketch(PlacedLamp.ID?) }
 
     private struct DragState {
         var target: Target
@@ -58,7 +62,8 @@ struct PlanCanvas: View {
         GeometryReader { geo in
             // Pinching never goes past the zoom limits mid-gesture, so the plan can't shrink to nothing.
             let v = drag?.locked ?? PlanViewport.fit(plot, in: geo.size, zoom: min(4, max(0.6, zoom * pinch)))
-            Canvas { ctx, _ in
+            Canvas { ctx, size in
+                drawOutsideGrid(ctx, v, size)
                 PlanDrawing.draw(plot, in: ctx, viewport: v, options: .init(selected: selected))
                 drawSelection(ctx, v)
                 if mode == .move { drawWallHandles(ctx, v) }
@@ -81,9 +86,9 @@ struct PlanCanvas: View {
                 // and the card never runs off the screen. Too wide for the screen, it scrolls sideways.
                 if showPop, cardOpen.wrappedValue, let id = selected, drag?.moved != true, plot.items.contains(where: { $0.id == id }) {
                     ViewThatFits(in: .horizontal) {
-                        LampPop(plot: $plot, id: id, tab: $popTab, more: more)
+                        LampPop(plot: $plot, id: id, tab: $popTab, more: more, change: change)
                         ScrollView(.horizontal, showsIndicators: false) {
-                            LampPop(plot: $plot, id: id, tab: $popTab, more: more)
+                            LampPop(plot: $plot, id: id, tab: $popTab, more: more, change: change)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -172,11 +177,10 @@ struct PlanCanvas: View {
         if let item = plot.items.first(where: { $0.id == selected }), handle(item).distance(to: p) < reach * 0.8 {
             return .aim(item.id)
         }
-        // The handles on the right and bottom walls resize the room.
+        // A grip in the middle of each wall resizes the room from that side.
         if mode == .move {
             let fingertip = 24 / v.scale
-            if p.distance(to: Point2(x: plot.roomWidth, y: plot.roomDepth / 2)) < fingertip { return .wall(true) }
-            if p.distance(to: Point2(x: plot.roomWidth / 2, y: plot.roomDepth)) < fingertip { return .wall(false) }
+            for (wall, at) in wallGrips() where p.distance(to: at) < fingertip { return .wall(wall) }
         }
         // Whatever is nearest the finger, so a lamp tagged close to the talent or camera doesn't hide them.
         var candidates: [(Target, Double)] = plot.items.map { (.lamp($0.id), $0.position.distance(to: p)) }
@@ -258,16 +262,31 @@ struct PlanCanvas: View {
                     plot.talent = inRoom(Point2(x: p.x + d.offset.x, y: p.y + d.offset.y))
                 case .camera:
                     plot.camera = inRoom(Point2(x: p.x + d.offset.x, y: p.y + d.offset.y))
-                case .wall(let across):
-                    // Never smaller than what's in the room, never bigger than a stage.
+                case .wall(let wall):
+                    // Never smaller than what's in the room, never bigger than a stage. The left and top walls
+                    // move the room's corner, so everything shifts to keep its place on screen.
                     let things = plot.items.map(\.position) + [plot.talent, plot.camera]
                     let at = (d.locked ?? v).metres(value.location)
-                    if across {
+                    let q = { (x: Double) in (x * 4).rounded() / 4 }
+                    switch wall {
+                    case .right:
                         let least = max(1.5, (things.map(\.x).max() ?? 0) + 0.3)
-                        plot.roomWidth = (min(60, max(least, at.x)) * 4).rounded() / 4
-                    } else {
+                        plot.roomWidth = q(min(60, max(least, at.x)))
+                    case .bottom:
                         let least = max(1.5, (things.map(\.y).max() ?? 0) + 0.3)
-                        plot.roomDepth = (min(60, max(least, at.y)) * 4).rounded() / 4
+                        plot.roomDepth = q(min(60, max(least, at.y)))
+                    case .left:
+                        let most = min(plot.roomWidth - 1.5, (things.map(\.x).min() ?? 0) - 0.3)
+                        let shift = q(max(plot.roomWidth - 60, min(most, at.x)))
+                        guard shift != 0 else { break }
+                        shiftRoom(dx: shift, dy: 0)
+                        drag?.locked?.origin.x += shift * (d.locked?.scale ?? v.scale)
+                    case .top:
+                        let most = min(plot.roomDepth - 1.5, (things.map(\.y).min() ?? 0) - 0.3)
+                        let shift = q(max(plot.roomDepth - 60, min(most, at.y)))
+                        guard shift != 0 else { break }
+                        shiftRoom(dx: 0, dy: shift)
+                        drag?.locked?.origin.y += shift * (d.locked?.scale ?? v.scale)
                     }
                 case .sketch:
                     if stroke.isEmpty { stroke = [v.metres(value.startLocation)] }
@@ -314,19 +333,52 @@ struct PlanCanvas: View {
         }
     }
 
-    /// Two small grips, middle of the right wall and middle of the bottom wall: drag them to size the room.
+    /// The middle of each wall, where its grip sits.
+    private func wallGrips() -> [(Wall, Point2)] {
+        let w = plot.roomWidth, d = plot.roomDepth
+        return [(.right, Point2(x: w, y: d / 2)), (.bottom, Point2(x: w / 2, y: d)),
+                (.left, Point2(x: 0, y: d / 2)), (.top, Point2(x: w / 2, y: 0))]
+    }
+
+    /// Moves the room's top-left corner by (dx, dy) metres, keeping everything where it stands.
+    private func shiftRoom(dx: Double, dy: Double) {
+        plot.roomWidth -= dx
+        plot.roomDepth -= dy
+        for i in plot.items.indices {
+            plot.items[i].x -= dx
+            plot.items[i].y -= dy
+        }
+        plot.talent = Point2(x: plot.talent.x - dx, y: plot.talent.y - dy)
+        plot.camera = Point2(x: plot.camera.x - dx, y: plot.camera.y - dy)
+    }
+
+    /// A small grip in the middle of each wall: drag it to size the room from that side.
     private func drawWallHandles(_ ctx: GraphicsContext, _ v: PlanViewport) {
-        let right = v.point(x: plot.roomWidth, y: plot.roomDepth / 2)
-        let bottom = v.point(x: plot.roomWidth / 2, y: plot.roomDepth)
-        for (c, upright) in [(right, true), (bottom, false)] {
+        for (wall, at) in wallGrips() {
+            let c = v.point(at)
+            let upright = wall == .left || wall == .right
             let size = upright ? CGSize(width: 8, height: 30) : CGSize(width: 30, height: 8)
             let r = Path(roundedRect: CGRect(x: c.x - size.width / 2, y: c.y - size.height / 2, width: size.width, height: size.height), cornerRadius: 4)
             ctx.fill(r, with: .color(Palette.p2))
             ctx.stroke(r, with: .color(Palette.quiet), lineWidth: 1)
         }
         if let d = drag, case .wall = d.target {
-            PlanDrawing.label(String(format: "%.2g × %.2g M", plot.roomWidth, plot.roomDepth), at: CGPoint(x: right.x - 40, y: bottom.y + 18), ctx)
+            let c = v.point(x: plot.roomWidth / 2, y: plot.roomDepth)
+            PlanDrawing.label(String(format: "%.2g × %.2g M", plot.roomWidth, plot.roomDepth), at: CGPoint(x: c.x, y: c.y + 20), ctx)
         }
+    }
+
+    /// A very faint metre grid beyond the walls, so lamps dragged outside still read against distance.
+    private func drawOutsideGrid(_ ctx: GraphicsContext, _ v: PlanViewport, _ size: CGSize) {
+        let tl = v.metres(.zero), br = v.metres(CGPoint(x: size.width, y: size.height))
+        var grid = Path()
+        for x in stride(from: tl.x.rounded(.down), through: br.x, by: 1) {
+            grid.move(to: v.point(x: x, y: tl.y)); grid.addLine(to: v.point(x: x, y: br.y))
+        }
+        for y in stride(from: tl.y.rounded(.down), through: br.y, by: 1) {
+            grid.move(to: v.point(x: tl.x, y: y)); grid.addLine(to: v.point(x: br.x, y: y))
+        }
+        ctx.stroke(grid, with: .color(Palette.text.opacity(0.025)), lineWidth: 1)
     }
 
     private func isGrouped(_ t: Target) -> Bool {
