@@ -617,9 +617,10 @@ struct Readout: View {
         HStack(spacing: 10) {
             steady("00,000 lx") { Text("\(key.formatted()) lx").contentTransition(.numericText()) }
             steady("No fill") { Text(LightMath.ratioText(plot)).foregroundStyle(Palette.quiet) }
-            steady("000.0/000 A") { Text(String(format: "%.1f/%.0f A", load.amps, capacity)).contentTransition(.numericText()) }
+            steady("00.0/00 A") { Text(String(format: "%.1f/%.0f A", load.amps, capacity)).contentTransition(.numericText()) }
         }
         .font(.lwData).foregroundStyle(Palette.text).lineLimit(1)
+        .fixedSize()
         .padding(.horizontal, 10).frame(minHeight: 30)
         .background(Palette.p1.opacity(0.9), in: RoundedRectangle(cornerRadius: Radius.chip))
         .overlay(RoundedRectangle(cornerRadius: Radius.chip).strokeBorder(Palette.rule))
