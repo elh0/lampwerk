@@ -13,14 +13,14 @@ enum StandIn {
     /// Head, neck and shoulders in one node, already in the clay material.
     static func node(_ style: Style = .planes) -> SCNNode {
         let root = SCNNode()
-        let head = SCNNode(geometry: style == .planes ? planarGeometry() : headGeometry())
-        head.position = SCNVector3(0, 0.225, 0)
+        let head = SCNNode(geometry: headGeometry(planes: style == .planes))
+        head.position = SCNVector3(0, 0.19, 0)
         root.addChildNode(head)
 
-        let neckShape = SCNCylinder(radius: 0.055, height: 0.16)
+        let neckShape = SCNCylinder(radius: 0.062, height: 0.13)
         neckShape.radialSegmentCount = style == .planes ? 8 : 48
         let neck = SCNNode(geometry: neckShape)
-        neck.position = SCNVector3(0, 0.07, -0.01)
+        neck.position = SCNVector3(0, 0.06, -0.012)
         root.addChildNode(neck)
 
         // Shoulders: a capsule across the collarbones, and a rounded chest below it, cut off by the frame.
@@ -59,7 +59,9 @@ enum StandIn {
     }
 
     /// The head as a grid over the sphere: rows top to bottom, columns round. Radius in metres.
-    private static func headGeometry(rows: Int = 160, cols: Int = 224) -> SCNGeometry {
+    /// With `planes`, the smooth surface keeps its outline but its shading snaps to broad planes (forehead,
+    /// temples, cheeks, nose wedge, jaw, chin), like a painter's planar study head.
+    private static func headGeometry(rows: Int = 160, cols: Int = 224, planes: Bool = false) -> SCNGeometry {
         var positions: [SCNVector3] = []
         var normals: [SCNVector3] = []
         positions.reserveCapacity((rows + 1) * (cols + 1))
@@ -83,6 +85,16 @@ enum StandIn {
                 let len = simd_length(n)
                 n = len > 1e-9 ? n / len : simd_normalize(p)
                 if simd_dot(n, p) < 0 { n = -n }
+                if planes {
+                    // The plane comes from the big forms only, so small features don't break it into a mosaic.
+                    let e2 = 0.01
+                    let q = { (t: Double, f: Double) in surface(SIMD3(sin(t) * sin(f), cos(t), sin(t) * cos(f)), coarse: true) }
+                    var cn = simd_cross(q(theta, phi + e2) - q(theta, phi - e2), q(min(.pi, theta + e2), phi) - q(max(0, theta - e2), phi))
+                    let cl = simd_length(cn)
+                    cn = cl > 1e-9 ? cn / cl : n
+                    if simd_dot(cn, p) < 0 { cn = -cn }
+                    n = plane(cn)
+                }
                 positions.append(SCNVector3(Float(p.x), Float(p.y), Float(p.z)))
                 normals.append(SCNVector3(Float(n.x), Float(n.y), Float(n.z)))
             }
@@ -138,6 +150,18 @@ enum StandIn {
         )
     }
 
+    /// Snaps a surface direction to its plane: steps of yaw round the head and pitch up and down,
+    /// finer across the face where the planes are smaller.
+    private static func plane(_ n: SIMD3<Double>) -> SIMD3<Double> {
+        let yaw = atan2(n.x, n.z), pitch = asin(max(-1, min(1, n.y)))
+        let face = abs(yaw) < 0.9
+        let yawStep = (face ? 30.0 : 45.0) * .pi / 180
+        let pitchStep = (face ? 28.0 : 40.0) * .pi / 180
+        let y = (yaw / yawStep).rounded() * yawStep
+        let p = (pitch / pitchStep).rounded() * pitchStep
+        return SIMD3(sin(y) * cos(p), sin(p), cos(y) * cos(p))
+    }
+
     private static func bump(_ x: Double, _ cx: Double, _ wx: Double, _ y: Double, _ cy: Double, _ wy: Double) -> Double {
         exp(-pow((x - cx) / wx, 2) - pow((y - cy) / wy, 2))
     }
@@ -148,24 +172,26 @@ enum StandIn {
     }
 
     /// Where the head's surface is in direction d (unit vector, y up, z towards the face), in metres.
-    private static func surface(_ d: SIMD3<Double>) -> SIMD3<Double> {
+    /// `coarse` keeps only the big forms, for working out which plane a point belongs to.
+    private static func surface(_ d: SIMD3<Double>, coarse: Bool = false) -> SIMD3<Double> {
         let x = d.x, y = d.y, z = d.z
         let front = smooth(0.1, 0.55, z)
         // Narrower at the jaw, fuller at the crown.
-        let jawTaper = 1 - 0.2 * smooth(-0.15, -0.85, y)
-        let ax = 0.078 * jawTaper, ay = 0.114, az = 0.098 * (1 - 0.08 * smooth(-0.3, -0.9, y))
+        let jawTaper = 1 - 0.12 * smooth(-0.2, -0.9, y)
+        let ax = 0.08 * jawTaper, ay = 0.108, az = 0.1 * (1 - 0.08 * smooth(-0.3, -0.9, y))
         var r = 1 / sqrt(pow(x / ax, 2) + pow(y / ay, 2) + pow(z / az, 2))
         var k = 0.0
         k += 0.05 * front * bump(x, 0, 0.42, y, 0.3, 0.08)                  // brow
-        k -= 0.055 * front * (bump(x, 0.27, 0.13, y, 0.14, 0.08) + bump(x, -0.27, 0.13, y, 0.14, 0.08)) // eyes
+        if !coarse { k -= 0.055 * front * (bump(x, 0.27, 0.13, y, 0.14, 0.08) + bump(x, -0.27, 0.13, y, 0.14, 0.08)) } // eyes
         k += 0.2 * front * bump(x, 0, 0.075, y, -0.02, 0.17)                 // nose bridge to tip
-        k += 0.06 * front * bump(x, 0, 0.13, y, -0.13, 0.05)                 // nose tip and wings
+        if !coarse { k += 0.06 * front * bump(x, 0, 0.13, y, -0.13, 0.05) } // nose tip and wings
         k += 0.035 * front * (bump(x, 0.42, 0.14, y, -0.05, 0.12) + bump(x, -0.42, 0.14, y, -0.05, 0.12)) // cheekbones
-        k += 0.035 * front * bump(x, 0, 0.18, y, -0.36, 0.05)                // lips
-        k -= 0.02 * front * bump(x, 0, 0.2, y, -0.44, 0.03)                  // under the lip
-        k += 0.08 * front * bump(x, 0, 0.22, y, -0.6, 0.1)                   // chin
+        if !coarse { k += 0.035 * front * bump(x, 0, 0.18, y, -0.36, 0.05) } // lips
+        if !coarse { k -= 0.02 * front * bump(x, 0, 0.2, y, -0.44, 0.03) } // under the lip
+        k += 0.11 * front * bump(x, 0, 0.26, y, -0.62, 0.12)                 // chin
+        k += 0.05 * smooth(0.3, 0.75, abs(x)) * bump(y, -0.5, 0.14, z, 0.3, 0.35) // jaw corners
         let side = smooth(0.82, 0.97, abs(x))
-        k += 0.12 * side * bump(y, 0.02, 0.19, z, -0.08, 0.13)               // ears
+        if !coarse { k += 0.12 * side * bump(y, 0.02, 0.19, z, -0.08, 0.13) } // ears
         r *= 1 + k
         return d * r
     }

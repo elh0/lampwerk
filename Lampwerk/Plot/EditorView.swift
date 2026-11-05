@@ -138,7 +138,6 @@ struct EditorView: View {
                         }
                         .buttonStyle(ActionButtonStyle())
                     }
-                    CameraPreview(plot: plot.wrappedValue)
                 }
             }
             .padding(.horizontal, 12).padding(.top, 8)
@@ -169,6 +168,8 @@ struct EditorView: View {
             .padding(12)
         }
         .overlay(alignment: .bottomTrailing) { viewSwitch.padding(12) }
+        // The camera monitor floats over the plan, under the mode switch, so opening it never shifts the layout.
+        .overlay(alignment: .topTrailing) { CameraPreview(plot: plot.wrappedValue).padding(.top, 58).padding(.trailing, 12) }
         .animation(.snappy(duration: 0.35), value: show3D)
         .animation(.snappy(duration: 0.2), value: toast)
         .animation(.snappy(duration: 0.2), value: armed?.id)

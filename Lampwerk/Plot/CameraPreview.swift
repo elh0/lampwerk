@@ -16,6 +16,8 @@ struct CameraPreview: View {
             PreviewScene(plot: plot, subject: StandIn.Style(rawValue: subject) ?? .planes)
                 .frame(width: width, height: width * 9 / 16)
                 .overlay { FrameLines().stroke(Palette.text.opacity(0.55), lineWidth: 1).padding(6).allowsHitTesting(false) }
+                // The 3D view ignores touches; this catches the tap so it never falls through to the plan.
+                .overlay { Color.clear.contentShape(Rectangle()).onTapGesture { withAnimation(.snappy(duration: 0.22)) { large.toggle() } } }
             HStack {
                 Text("CAM").foregroundStyle(Palette.quiet)
                 Spacer()
@@ -140,6 +142,8 @@ final class PreviewRig {
 
     /// Eye height on the mark, metres.
     private static let eyes = 1.6
+    /// The stand-in's eyes sit this far above its neck base.
+    private static let eyesAboveNeck = 0.2
     /// Height of the frame: a medium close-up, head and shoulders.
     private static let frameHeight = 0.4
     private static let fovDegrees: CGFloat = 21
@@ -151,7 +155,7 @@ final class PreviewRig {
         scene.fogEndDistance = 9
 
         // The stand-in's neck base sits so its eyes land at eye height.
-        standIn.position = SCNVector3(0, Float(Self.eyes - 0.23), 0)
+        standIn.position = SCNVector3(0, Float(Self.eyes - Self.eyesAboveNeck), 0)
         scene.rootNode.addChildNode(standIn)
 
         // A dark clay floor far below, fading into the fog, for when the view opens out.
