@@ -36,7 +36,8 @@ final class PlotStore {
     @discardableResult
     func create(name: String, starter: Starter, width: Double = 6, depth: Double = 8.4) -> Plot {
         let number = (plots.map(\.number).max() ?? 0) + 1
-        var plot = Plot(name: name.isEmpty ? "Untitled" : name, number: number, starter: starter, items: starter.items())
+        let typed = name.trimmingCharacters(in: .whitespaces)
+        var plot = Plot(name: typed.isEmpty ? "Untitled \(number)" : typed, number: number, starter: starter, items: starter.items())
         // Starters are drawn for a 6 × 8.4 m room; keep the setup centred in the chosen size.
         let dx = (width - plot.roomWidth) / 2, dy = (depth - plot.roomDepth) / 2
         plot.roomWidth = width
@@ -68,6 +69,13 @@ final class PlotStore {
         copy.number = (plots.map(\.number).max() ?? 0) + 1
         copy.updated = Date()
         plots.insert(copy, at: 0)
+        save()
+    }
+
+    /// Puts a deleted plot back where it was in the list.
+    func restore(_ plot: Plot, at index: Int) {
+        guard !plots.contains(where: { $0.id == plot.id }) else { return }
+        plots.insert(plot, at: min(index, plots.count))
         save()
     }
 

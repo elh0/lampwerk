@@ -244,15 +244,7 @@ struct Inspector: View {
             }
     }
 
-    private func addDiff() {
-        let reach = min(0.9, max(0.5, item.position.distance(to: plot.talent) * 0.4))
-        let a = item.angle * .pi / 180
-        let frame = PlacedLamp(
-            lampID: "f4d", x: item.x + reach * cos(a), y: item.y + reach * sin(a),
-            angle: item.angle + 90, role: .diff, cct: 0, modifier: Diffusion.standard, height: item.height
-        )
-        plot.items.insert(frame, at: index + 1)
-    }
+    private func addDiff() { plot.addDiff(before: index) }
 
     private func row(_ label: String, _ value: String, last: Bool = false) -> some View {
         HStack {

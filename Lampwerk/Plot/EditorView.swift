@@ -318,7 +318,7 @@ struct EditorView: View {
                 Button { showingSpace = true } label: {
                     HStack(spacing: 4) {
                         Text(String(format: "%.1f × %.1f m", plot.roomWidth, plot.roomDepth))
-                        if plot.floorPlan != nil { Text("· plan") }
+                        Text(plot.floorPlan != nil ? "· plan" : "· add floor plan")
                         Image(systemName: "chevron.down").font(.system(size: 9))
                     }
                     .font(.lwData).foregroundStyle(Palette.quiet)
@@ -329,6 +329,7 @@ struct EditorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Menu {
                 Button("Add a lamp", systemImage: "plus") { showingLibrary = true }
+                Button("Room size and floor plan", systemImage: "square.dashed") { showingSpace = true }
                 Button("Tag the room in AR", systemImage: "arkit") {
                     if plot.items.isEmpty { showingAR = true } else { confirmingAR = true }
                 }

@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// iOS-style swipe to delete for the app's own ruled rows (they aren't Lists, so
-/// `.swipeActions` isn't available). Swipe left to reveal "Delete"; tap it, or swipe all
-/// the way, to call `action`, which always asks first. A swipe right, or another swipe,
+/// `.swipeActions` isn't available). Swipe left to reveal a bin; tap it, or swipe all
+/// the way, to call `action`. A swipe right, or another swipe,
 /// closes it. Press and hold still works alongside.
 struct SwipeToDelete: ViewModifier {
     var enabled = true
@@ -10,7 +10,7 @@ struct SwipeToDelete: ViewModifier {
 
     @State private var offset: CGFloat = 0
     @State private var settled: CGFloat = 0
-    private let reveal: CGFloat = 88
+    private let reveal: CGFloat = 72
     private let fullSwipe: CGFloat = 180
 
     func body(content: Content) -> some View {
@@ -21,8 +21,8 @@ struct SwipeToDelete: ViewModifier {
                     close()
                     action()
                 } label: {
-                    Text("Delete")
-                        .font(.lwButton)
+                    Image(systemName: "trash")
+                        .font(.system(size: 17, weight: .medium))
                         .foregroundStyle(Palette.text)
                         .frame(width: max(reveal, -offset))
                         .frame(maxHeight: .infinity)
@@ -73,7 +73,7 @@ struct SwipeToDelete: ViewModifier {
 }
 
 extension View {
-    /// Swipe left to reveal Delete. `action` should ask before deleting anything.
+    /// Swipe left to reveal a bin. `action` should offer an undo.
     func swipeToDelete(enabled: Bool = true, action: @escaping () -> Void) -> some View {
         modifier(SwipeToDelete(enabled: enabled, action: action))
     }

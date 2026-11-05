@@ -28,12 +28,14 @@ struct PlanCanvas: View {
     @State private var hold: Task<Void, Never>?
     @GestureState private var pinch: CGFloat = 1
 
-    private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, none, sketch(PlacedLamp.ID?) }
+    private enum Target { case lamp(PlacedLamp.ID), aim(PlacedLamp.ID), talent, camera, wall(Bool), none, sketch(PlacedLamp.ID?) }
 
     private struct DragState {
         var target: Target
         var offset: Point2
         var moved = false
+        /// Held still while a wall is dragged, so the room doesn't slide out from under your finger.
+        var locked: PlanViewport?
         /// A press and hold removed the lamp, so letting go does nothing more.
         var held = false
     }
@@ -43,10 +45,12 @@ struct PlanCanvas: View {
 
     var body: some View {
         GeometryReader { geo in
-            let v = PlanViewport.fit(plot, in: geo.size, zoom: zoom * pinch)
+            // Pinching never goes past the zoom limits mid-gesture, so the plan can't shrink to nothing.
+            let v = drag?.locked ?? PlanViewport.fit(plot, in: geo.size, zoom: min(4, max(0.6, zoom * pinch)))
             Canvas { ctx, _ in
                 PlanDrawing.draw(plot, in: ctx, viewport: v, options: .init(selected: selected))
                 drawSelection(ctx, v)
+                if mode == .move { drawWallHandles(ctx, v) }
                 if stroke.count > 1 {
                     var path = Path()
                     path.addLines(stroke.map { v.point($0) })
@@ -156,6 +160,12 @@ struct PlanCanvas: View {
         if let item = plot.items.first(where: { $0.id == selected }), handle(item).distance(to: p) < reach * 0.8 {
             return .aim(item.id)
         }
+        // The handles on the right and bottom walls resize the room.
+        if mode == .move {
+            let fingertip = 24 / v.scale
+            if p.distance(to: Point2(x: plot.roomWidth, y: plot.roomDepth / 2)) < fingertip { return .wall(true) }
+            if p.distance(to: Point2(x: plot.roomWidth / 2, y: plot.roomDepth)) < fingertip { return .wall(false) }
+        }
         // Whatever is nearest the finger, so a lamp tagged close to the talent or camera doesn't hide them.
         var candidates: [(Target, Double)] = plot.items.map { (.lamp($0.id), $0.position.distance(to: p)) }
         candidates.append((.talent, plot.talent.distance(to: p)))
@@ -192,6 +202,7 @@ struct PlanCanvas: View {
                     default: break
                     }
                     drag = DragState(target: target, offset: offset)
+                    if case .wall = target { drag?.locked = v }
                     switch target {
                     case .lamp(let id), .sketch(let id?): holdToRemove(id)
                     default: break
@@ -215,6 +226,17 @@ struct PlanCanvas: View {
                     plot.talent = inRoom(Point2(x: p.x + d.offset.x, y: p.y + d.offset.y))
                 case .camera:
                     plot.camera = inRoom(Point2(x: p.x + d.offset.x, y: p.y + d.offset.y))
+                case .wall(let across):
+                    // Never smaller than what's in the room, never bigger than a stage.
+                    let things = plot.items.map(\.position) + [plot.talent, plot.camera]
+                    let at = (d.locked ?? v).metres(value.location)
+                    if across {
+                        let least = max(1.5, (things.map(\.x).max() ?? 0) + 0.3)
+                        plot.roomWidth = (min(60, max(least, at.x)) * 4).rounded() / 4
+                    } else {
+                        let least = max(1.5, (things.map(\.y).max() ?? 0) + 0.3)
+                        plot.roomDepth = (min(60, max(least, at.y)) * 4).rounded() / 4
+                    }
                 case .sketch:
                     if stroke.isEmpty { stroke = [v.metres(value.startLocation)] }
                     stroke.append(p)
@@ -231,7 +253,7 @@ struct PlanCanvas: View {
                         if selected == id { cardOpen.wrappedValue.toggle() } else { selected = id; cardOpen.wrappedValue = false }
                     case .none, .sketch(.none):
                         if let armed { drop(armed.id, v.metres(value.startLocation)) } else { selected = nil }
-                    case .talent, .camera:
+                    case .talent, .camera, .wall:
                         selected = nil
                     case .aim:
                         break
@@ -255,6 +277,21 @@ struct PlanCanvas: View {
             plot.items.remove(at: i)
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             say("Removed \(name) · Undo bottom left")
+        }
+    }
+
+    /// Two small grips, middle of the right wall and middle of the bottom wall: drag them to size the room.
+    private func drawWallHandles(_ ctx: GraphicsContext, _ v: PlanViewport) {
+        let right = v.point(x: plot.roomWidth, y: plot.roomDepth / 2)
+        let bottom = v.point(x: plot.roomWidth / 2, y: plot.roomDepth)
+        for (c, upright) in [(right, true), (bottom, false)] {
+            let size = upright ? CGSize(width: 8, height: 30) : CGSize(width: 30, height: 8)
+            let r = Path(roundedRect: CGRect(x: c.x - size.width / 2, y: c.y - size.height / 2, width: size.width, height: size.height), cornerRadius: 4)
+            ctx.fill(r, with: .color(Palette.p2))
+            ctx.stroke(r, with: .color(Palette.quiet), lineWidth: 1)
+        }
+        if let d = drag, case .wall = d.target {
+            PlanDrawing.label(String(format: "%.2g × %.2g M", plot.roomWidth, plot.roomDepth), at: CGPoint(x: right.x - 40, y: bottom.y + 18), ctx)
         }
     }
 }

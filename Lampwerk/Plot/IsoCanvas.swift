@@ -108,7 +108,7 @@ struct IsoCanvas: View {
 
     var body: some View {
         GeometryReader { geo in
-            let v = drag?.locked ?? IsoProjection.fit(plot, in: geo.size, yaw: yaw, pitch: pitch, zoom: zoom * pinch)
+            let v = drag?.locked ?? IsoProjection.fit(plot, in: geo.size, yaw: yaw, pitch: pitch, zoom: min(5, max(0.6, zoom * pinch)))
             Canvas { ctx, _ in draw(ctx, v) }
                 .contentShape(Rectangle())
                 .gesture(gesture(v))

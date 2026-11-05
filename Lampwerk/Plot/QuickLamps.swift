@@ -52,6 +52,20 @@ extension PlacedLamp {
     }
 }
 
+extension Plot {
+    /// Puts a 4x4 of 216 in front of the head at `index`, square to its beam, just past the head.
+    mutating func addDiff(before index: Int) {
+        let item = items[index]
+        let reach = min(0.9, max(0.5, item.position.distance(to: talent) * 0.4))
+        let a = item.angle * .pi / 180
+        let frame = PlacedLamp(
+            lampID: "f4d", x: item.x + reach * cos(a), y: item.y + reach * sin(a),
+            angle: item.angle + 90, role: .diff, cct: 0, modifier: Diffusion.standard, height: item.height
+        )
+        items.insert(frame, at: index + 1)
+    }
+}
+
 /// The row of quick lamps. Tap one to drop it with your next tap on the plan, or press and drag it straight on.
 /// With a lamp picked, tapping one swaps it in.
 struct QuickRow: View {
@@ -103,7 +117,7 @@ struct LampPop: View {
             let item = plot.items[i]
             HStack(spacing: 4) {
                 Text(String(format: "%02d ", i + 1) + lamp.shortName)
-                    .font(.lwButton).foregroundStyle(Palette.text).lineLimit(1).padding(.horizontal, 6)
+                    .font(.lwButton).foregroundStyle(Palette.text).lineLimit(1).padding(.horizontal, 4)
                 if lamp.isLight {
                     button(plot.isOn(item) ? "On" : "Off", lit: plot.isOn(item)) {
                         if plot.isOn(item) { plot.items[i].offIn.insert(plot.shot) } else { plot.items[i].offIn.remove(plot.shot) }
@@ -119,13 +133,29 @@ struct LampPop: View {
                 }
                 if lamp.modifiers.count > 1 {
                     Menu {
+                        // Each modifier with the spread it gives, so a tighter beam is one pick away.
                         Picker(lamp.kind == .diff ? "Diff" : "Modifier", selection: Binding(
                             get: { plot.items[i].modifier },
                             set: { plot.items[i].modifier = $0; LastModifier.set(lamp.id, $0) }
                         )) {
-                            ForEach(lamp.modifiers, id: \.self) { m in Text(m == "None" ? "Bare" : m).tag(m) }
+                            ForEach(lamp.modifiers, id: \.self) { m in Text(modifierLine(m, lamp)).tag(m) }
                         }
                     } label: { label(item.modifier == "None" ? "Bare" : short(item.modifier)) }
+                }
+                if lamp.isLight, LightMath.spread(item) < 300 {
+                    if let frame = LightMath.diffFrame(for: item, in: plot), let f = plot.items.firstIndex(where: { $0.id == frame.id }) {
+                        Menu {
+                            Picker("Diff", selection: Binding(
+                                get: { Diffusion.material(plot.items[f]).name },
+                                set: { plot.items[f].modifier = $0 }
+                            )) {
+                                ForEach(Diffusion.materials, id: \.name) { m in Text("\(m.name), \(Diffusion.stops(m))").tag(m.name) }
+                            }
+                            Button("Remove diff", systemImage: "minus.circle", role: .destructive) { plot.items.remove(at: f) }
+                        } label: { label("Diff") }
+                    } else {
+                        button("+ Diff") { plot.addDiff(before: i) }
+                    }
                 }
                 Menu {
                     ForEach(QuickLamps.swaps(for: lamp).filter { $0.id != lamp.id }) { l in
@@ -140,7 +170,14 @@ struct LampPop: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Remove")
-                button("More") { more() }
+                Button { more() } label: {
+                    Image(systemName: "ellipsis").font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Palette.text)
+                        .frame(width: 40, height: 36)
+                        .background(Palette.p3, in: RoundedRectangle(cornerRadius: Radius.chip))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("All settings")
             }
             .padding(4)
             .background(Palette.p2, in: RoundedRectangle(cornerRadius: Radius.panel))
@@ -148,6 +185,13 @@ struct LampPop: View {
             .shadow(color: .black.opacity(0.45), radius: 14, y: 8)
             .fixedSize()
         }
+    }
+
+    /// "Softbox · 130°": the modifier and how wide the light leaves it.
+    private func modifierLine(_ m: String, _ lamp: Lamp) -> String {
+        let beam = Modifiers.beam[m] ?? lamp.beam
+        let name = m == "None" ? "Bare" : m
+        return lamp.kind == .diff ? name : name + " · " + (beam >= 300 ? "all round" : "\(Int(beam))°")
     }
 
     /// "Chimera, medium" reads "Chimera" on the card; the full name is in the menu.

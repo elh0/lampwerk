@@ -74,10 +74,22 @@ enum PlanDrawing {
             ctx.stroke(grid, with: .color(ink.grid), style: stroke)
         }
 
-        // Beams under everything.
+        // Beams under everything, kept inside the room and fading out as they travel, so wide sources don't
+        // flood the plan. Paper keeps a flat faint grey, which photocopies better than a fade.
+        var beams = ctx
+        beams.clip(to: Path(CGRect(origin: v.point(x: 0, y: 0), size: CGSize(width: plot.roomWidth * v.scale, height: plot.roomDepth * v.scale))))
         for item in plot.items where plot.isOn(item) {
             guard let lamp = item.lamp else { continue }
-            ctx.fill(beam(item, lamp, v, spread: LightMath.spread(item, in: plot)), with: .color(ink.beam))
+            let shape = beam(item, lamp, v, spread: LightMath.spread(item, in: plot))
+            if o.paper {
+                beams.fill(shape, with: .color(ink.beam))
+            } else {
+                let spread = LightMath.spread(item, in: plot)
+                let reach = (spread >= 300 ? LightMath.glowRadius(lamp, output: item.output) : LightMath.beamLength(lamp, output: item.output)) * v.scale
+                beams.fill(shape, with: .radialGradient(
+                    Gradient(colors: [Palette.gel.opacity(Palette.beamOpacity * 1.3), Palette.gel.opacity(0)]),
+                    center: v.point(item.position), startRadius: 0, endRadius: reach))
+            }
         }
 
         // Walls.
