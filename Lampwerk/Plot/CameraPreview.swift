@@ -40,7 +40,7 @@ struct CameraPreview: View {
         let sources = sources(plot)
         // Exposure from the key at the talent, so a 4:1 looks like a 4:1 whatever the lux.
         let key = sources.filter { $0.strength > 0 }.map(\.strength).max() ?? 1
-        let exposure = 0.85 / max(1, LightMath.keyLux(plot) > 0 ? LightMath.keyLux(plot) : key)
+        let exposure = 0.5 / max(1, LightMath.keyLux(plot) > 0 ? LightMath.keyLux(plot) : key)
         let balance = SIMD3<Double>(1, 1, 1) / (keyColour(plot) + 0.0001)
 
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
