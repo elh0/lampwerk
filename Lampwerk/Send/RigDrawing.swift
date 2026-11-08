@@ -457,13 +457,13 @@ struct RigPage: View {
         let throwM = first.position.distance(to: plot.talent)
         if lamp.isGrip { return String(format: "Stands\n%.1f\u{00A0}m off", throwM) }
         let h = IsoCanvas.height(first)
-        return String(format: "%.1f\u{00A0}m high\n%.1f\u{00A0}m throw", h, throwM)
+        return String(format: "%.1f\u{00A0}m\u{00A0}high\n%.1f\u{00A0}m\u{00A0}throw", h, throwM)
     }
 
     private func row(_ a: String, _ b: String, _ c: String, _ d: String, header: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(a).frame(width: 52, alignment: .leading)
-            Text(b).frame(width: 92, alignment: .leading)
+            Text(a).frame(width: 48, alignment: .leading)
+            Text(b).frame(width: 86, alignment: .leading)
             Text(c).frame(width: 50, alignment: .leading)
             Text(d).frame(maxWidth: .infinity, alignment: .leading)
         }
