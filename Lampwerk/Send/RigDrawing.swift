@@ -143,8 +143,8 @@ struct AxoDrawing {
         var grid = Path()
         for x in stride(from: 1.0, to: W, by: 1) { grid.move(to: v.point(x, 0)); grid.addLine(to: v.point(x, D)) }
         for y in stride(from: 1.0, to: D, by: 1) { grid.move(to: v.point(0, y)); grid.addLine(to: v.point(W, y)) }
-        ctx.stroke(grid, with: .color(ink.opacity(0.08)), lineWidth: 0.4)
-        ctx.stroke(poly([v.point(0, 0), v.point(W, 0), v.point(W, D), v.point(0, D)]), with: .color(ink.opacity(0.7)), lineWidth: fine)
+        ctx.stroke(grid, with: .color(ink.opacity(0.06)), lineWidth: 0.3)
+        ctx.stroke(poly([v.point(0, 0), v.point(W, 0), v.point(W, D), v.point(0, D)]), with: .color(ink.opacity(0.85)), lineWidth: fine * 1.5)
 
         // The two far walls stand; the near ones stay open.
         let walls: [(Point2, Point2, Double)] = [
@@ -152,7 +152,29 @@ struct AxoDrawing {
             (Point2(x: 0, y: D), Point2(x: 0, y: 0), -sY), (Point2(x: W, y: 0), Point2(x: W, y: D), sY),
         ]
         for (a, b, facing) in walls where facing < 0 {
-            ctx.stroke(poly([v.point(a), v.point(b), v.point(b, rh), v.point(a, rh)]), with: .color(ink.opacity(0.55)), lineWidth: fine)
+            ctx.stroke(poly([v.point(a), v.point(b), v.point(b, rh), v.point(a, rh)]), with: .color(ink.opacity(0.5)), lineWidth: fine * 0.8)
+            // A skirting line and a faint panel rhythm give the walls some grain.
+            var grain = Path()
+            grain.move(to: v.point(a, 0.12)); grain.addLine(to: v.point(b, 0.12))
+            let run = a.distance(to: b), steps = max(1, Int(run / 1.2))
+            for k in 1..<steps {
+                let f = Double(k) / Double(steps)
+                let q = Point2(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
+                grain.move(to: v.point(q, 0.12)); grain.addLine(to: v.point(q, rh))
+            }
+            ctx.stroke(grain, with: .color(ink.opacity(0.12)), lineWidth: 0.3)
+        }
+
+        // Where each lit head lands: a grey pool on the floor, drawn under everything.
+        if !setOnly {
+            for item in plot.items where item.lamp?.isLight == true {
+                let on = shot.map { RigGroups.inked(item, in: $0) } ?? true
+                if on, let ring = pool(item) {
+                    let p = poly(ring.map { v.point($0) })
+                    ctx.fill(p, with: .color(ink.opacity(0.07)))
+                    ctx.stroke(p, with: .color(ink.opacity(0.3)), lineWidth: 0.35)
+                }
+            }
         }
 
         if dimensions {
@@ -224,18 +246,66 @@ struct AxoDrawing {
         }
         let head = v.point(item.position, z)
         if on {
+            // The beam's two edges, down to the edges of its pool.
             var beam = Path()
-            beam.move(to: head); beam.addLine(to: v.point(plot.talent, 1.5))
-            c.stroke(beam, with: .color(ink.opacity(0.6)), style: StrokeStyle(lineWidth: 0.5, dash: [3, 2.5]))
+            if let ring = pool(item), ring.count >= 32 {
+                for q in [ring[8], ring[24]] { beam.move(to: head); beam.addLine(to: v.point(q)) }
+            } else {
+                beam.move(to: head); beam.addLine(to: v.point(plot.talent, 1.5))
+            }
+            c.stroke(beam, with: .color(ink.opacity(0.55)), style: StrokeStyle(lineWidth: 0.4, dash: [2.5, 2]))
         }
-        var stand = Path()
-        stand.move(to: head); stand.addLine(to: v.point(item.position))
-        for k in [0.0, 2.1, 4.2] {
-            stand.move(to: v.point(item.position)); stand.addLine(to: v.point(item.x + 0.3 * cos(k), item.y + 0.3 * sin(k)))
+        if z > 3.0 {
+            // Rigged high: a dotted drop to the floor and a small mark where it lands, no stand.
+            var drop = Path()
+            drop.move(to: head); drop.addLine(to: v.point(item.position))
+            c.stroke(drop, with: .color(ink.opacity(0.45 * o)), style: StrokeStyle(lineWidth: 0.4, dash: [1, 2]))
+            var mark = Path()
+            mark.move(to: v.point(item.x - 0.15, item.y)); mark.addLine(to: v.point(item.x + 0.15, item.y))
+            mark.move(to: v.point(item.x, item.y - 0.15)); mark.addLine(to: v.point(item.x, item.y + 0.15))
+            c.stroke(mark, with: .color(ink.opacity(0.5 * o)), lineWidth: 0.4)
+        } else {
+            var stand = Path()
+            stand.move(to: head); stand.addLine(to: v.point(item.position))
+            for k in [0.0, 2.1, 4.2] {
+                stand.move(to: v.point(item.position)); stand.addLine(to: v.point(item.x + 0.3 * cos(k), item.y + 0.3 * sin(k)))
+            }
+            c.stroke(stand, with: .color(line), lineWidth: 0.7)
         }
-        c.stroke(stand, with: .color(line), lineWidth: 0.6)
         box(c, v, item.position, w: 0.46, d: 0.46, z: z - 0.15, h: 0.34, top: on ? ink : nil, opacity: o)
         modifier(c, v, item, z: z, a: a, opacity: o)
+    }
+
+    /// The pool a head throws on the floor, as 32 points round its edge (index 8 and 24 are the two sides).
+    /// It lands on the talent's mark when the head points their way, otherwise a little way out along its aim.
+    /// Practicals throw a small round pool under themselves.
+    private func pool(_ item: PlacedLamp) -> [Point2]? {
+        guard let lamp = item.lamp, lamp.isLight else { return nil }
+        let z = IsoCanvas.height(item)
+        let spread = LightMath.spread(item, in: plot)
+        let centre: Point2, rx: Double, ry: Double, dir: Double
+        if spread >= 300 {
+            centre = item.position; rx = 0.9; ry = 0.9; dir = 0
+        } else {
+            let toTalent = item.position.bearing(to: plot.talent)
+            let aimed = LightMath.angleBetween(toTalent, item.angle) <= 25
+            let a = item.angle * .pi / 180
+            let reach = max(1.2, z * 1.1)
+            centre = aimed ? plot.talent : Point2(x: item.x + cos(a) * reach, y: item.y + sin(a) * reach)
+            dir = aimed ? toTalent * .pi / 180 : a
+            let flat = item.position.distance(to: centre), slant = (flat * flat + z * z).squareRoot()
+            let half = min(80, spread / 2) * .pi / 180
+            ry = min(2.6, max(0.35, slant * tan(half)))
+            // Long along the throw when the head is low, near round when it's overhead.
+            let grazing = max(0.45, z / max(0.1, slant))
+            rx = min(3.2, ry / grazing)
+        }
+        let c = cos(dir), s = sin(dir)
+        return (0..<32).map { k in
+            let t = Double(k) / 32 * 2 * .pi
+            let u = cos(t) * rx, w = sin(t) * ry
+            return Point2(x: centre.x + u * c - w * s, y: centre.y + u * s + w * c)
+        }
     }
 
     private func modifier(_ c: GraphicsContext, _ v: IsoProjection, _ item: PlacedLamp, z: Double, a: Double, opacity o: Double) {
@@ -282,11 +352,11 @@ struct AxoDrawing {
         for (a, b, facing) in sides where facing > 0 {
             let f = poly([v.point(a.0, a.1, z), v.point(b.0, b.1, z), v.point(b.0, b.1, z1), v.point(a.0, a.1, z1)])
             c.fill(f, with: .color(paper))
-            c.stroke(f, with: .color(line), lineWidth: 0.7)
+            c.stroke(f, with: .color(line), lineWidth: 0.85)
         }
         let lid = poly([v.point(x0, y0, z1), v.point(x1, y0, z1), v.point(x1, y1, z1), v.point(x0, y1, z1)])
         c.fill(lid, with: .color(top ?? paper))
-        c.stroke(lid, with: .color(line), lineWidth: 0.7)
+        c.stroke(lid, with: .color(line), lineWidth: 0.85)
     }
 
     private func dimension(_ c: GraphicsContext, _ a: CGPoint, _ b: CGPoint, _ text: String) {
