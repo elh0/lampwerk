@@ -105,7 +105,7 @@ struct AxoDrawing {
     private let paper = Palette.paper
 
     /// Width kept clear each side for the call-outs.
-    static let column: CGFloat = 112
+    static let column: CGFloat = 84
 
     func projection(in size: CGSize) -> IsoProjection {
         let W = plot.roomWidth, D = plot.roomDepth, rh = IsoProjection.roomHeight
@@ -421,13 +421,13 @@ struct RigPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             RigHeader(title: setOnly ? "The set" : "The rig", plot: plot, line: line)
-            HStack(alignment: .center, spacing: 24) {
+            HStack(alignment: .center, spacing: 16) {
                 Canvas { ctx, size in
                     AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: pitch, setOnly: setOnly).draw(ctx, size: size)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if !setOnly {
-                    table.frame(width: 330)
+                    table.frame(width: 262)
                 }
             }
             .frame(maxHeight: .infinity)
@@ -455,21 +455,21 @@ struct RigPage: View {
     private func rigged(_ g: RigGroup) -> String {
         guard let first = g.items.first, let lamp = g.lamp else { return "" }
         let throwM = first.position.distance(to: plot.talent)
-        if lamp.isGrip { return String(format: "On stands, %.1f m off", throwM) }
+        if lamp.isGrip { return String(format: "Stands, %.1f\u{00A0}m off", throwM) }
         let h = IsoCanvas.height(first)
         let hs = g.items.count > 1 ? "Heads" : "Head"
-        return String(format: "\(hs) %.1f m, %.1f m to talent", h, throwM)
+        return String(format: "\(hs) %.1f\u{00A0}m, %.1f\u{00A0}m to talent", h, throwM)
     }
 
     private func row(_ a: String, _ b: String, _ c: String, _ d: String, header: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(a).frame(width: 70, alignment: .leading)
-            Text(b).frame(width: 104, alignment: .leading)
-            Text(c).frame(width: 62, alignment: .leading)
+            Text(a).frame(width: 52, alignment: .leading)
+            Text(b).frame(width: 92, alignment: .leading)
+            Text(c).frame(width: 50, alignment: .leading)
             Text(d).frame(maxWidth: .infinity, alignment: .leading)
         }
         .fixedSize(horizontal: false, vertical: true)
-        .font(Fonts.mono(7.5, .regular))
+        .font(Fonts.mono(7, .regular))
         .foregroundStyle(header ? Palette.ink.opacity(0.45) : Palette.ink)
         .padding(.vertical, 6)
         .overlay(alignment: .top) { Rectangle().fill(Palette.ink.opacity(0.15)).frame(height: 0.5) }
