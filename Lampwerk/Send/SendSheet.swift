@@ -14,6 +14,9 @@ struct SendSheet: View {
     @State private var pdf: URL?
     @State private var image: URL?
     @State private var image3D: URL?
+    @State private var drawing: URL?
+    /// The drawing with no lamps: just the room, talent and camera.
+    @State private var setOnly = false
     @State private var preparing = true
 
     var body: some View {
@@ -44,6 +47,15 @@ struct SendSheet: View {
                     option("Gaffer sheet", "A4 PDF: plan, gear list, heights and power.", url: pdf)
                     option("Plan image", "The plan from above, good for WhatsApp.", url: image)
                     option("3D picture", "The room in 3D, from the angle you left it at.", url: image3D)
+                    option(setOnly ? "Set drawing" : "Rig drawing",
+                           setOnly ? "A4 PDF: the room drawn in ink, no lamps." : "A4 PDF: the room drawn in ink, lamps lettered, a rig table, and one drawing per setup.",
+                           url: drawing)
+                    Toggle(isOn: $setOnly) {
+                        Text("Set only, no lamps").font(.lwChip).foregroundStyle(Palette.quiet)
+                    }
+                    .tint(Palette.gel)
+                    .padding(.vertical, 8)
+                    .overlay(alignment: .bottom) { Rectangle().fill(Palette.rule).frame(height: 1) }
                     textOption
                     liveLink
                 }
@@ -60,6 +72,9 @@ struct SendSheet: View {
         }
         .background(Palette.p1)
         // Remake the files whenever a name changes, once typing settles.
+        .task(id: setOnly) {
+            drawing = Export.rigDrawingPDF(plot, yaw: yaw, pitch: pitch, setOnly: setOnly)
+        }
         .task(id: plot) {
             preparing = true
             try? await Task.sleep(for: .milliseconds(350))
@@ -67,6 +82,7 @@ struct SendSheet: View {
             pdf = Export.gafferSheetPDF(plot, supply: supply)
             image = Export.planImage(plot)
             image3D = Export.isoImage(plot, yaw: yaw, pitch: pitch)
+            drawing = Export.rigDrawingPDF(plot, yaw: yaw, pitch: pitch, setOnly: setOnly)
             preparing = false
         }
     }

@@ -15,6 +15,9 @@ struct LampwerkApp: App {
                 .environment(store)
                 .preferredColorScheme(.dark)
                 .task { await FoundingTester.markIfBeta() }
+                #if DEBUG
+                .task { RigSample.writeIfAsked() }
+                #endif
         }
     }
 }

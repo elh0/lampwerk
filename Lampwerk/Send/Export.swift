@@ -32,6 +32,28 @@ enum Export {
         }
     }
 
+    /// The rig drawing: page one the whole rig with its table, page two light in sections when the setups differ.
+    /// Set only draws the room, talent and camera with no lamps, on one page.
+    static func rigDrawingPDF(_ plot: Plot, yaw: Double, pitch: Double, setOnly: Bool) -> URL? {
+        let url = folder().appending(path: "\(fileName(plot))-\(setOnly ? "set" : "rig")-drawing.pdf")
+        let groups = RigGroups.make(plot)
+        let sections = setOnly ? false : RigGroups.sections(plot, groups).count > 1
+        var pages: [AnyView] = [AnyView(RigPage(plot: plot, groups: groups, yaw: yaw, pitch: pitch, setOnly: setOnly, hasSections: sections))]
+        if sections { pages.append(AnyView(SectionsPage(plot: plot, groups: groups, yaw: yaw, pitch: pitch))) }
+        var box = CGRect(x: 0, y: 0, width: 842, height: 595)
+        guard let pdf = CGContext(url as CFURL, mediaBox: &box, nil) else { return nil }
+        for page in pages {
+            let renderer = ImageRenderer(content: page)
+            renderer.render { _, draw in
+                pdf.beginPDFPage(nil)
+                draw(pdf)
+                pdf.endPDFPage()
+            }
+        }
+        pdf.closePDF()
+        return url
+    }
+
     /// The room in 3D, from the angle it was left at in the editor.
     static func isoImage(_ plot: Plot, yaw: Double, pitch: Double) -> URL? {
         let url = folder().appending(path: "\(fileName(plot))-3d.png")
