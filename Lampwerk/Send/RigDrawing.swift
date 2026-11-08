@@ -166,15 +166,17 @@ struct AxoDrawing {
         }
 
         // Where each lit head lands: a grey pool on the floor, drawn under everything.
+        // One flat tone for all of them (overlaps don't stack darker), kept inside the floor.
         if !setOnly {
+            var pools = Path()
             for item in plot.items where item.lamp?.isLight == true {
                 let on = shot.map { RigGroups.inked(item, in: $0) } ?? true
-                if on, let ring = pool(item) {
-                    let p = poly(ring.map { v.point($0) })
-                    ctx.fill(p, with: .color(ink.opacity(0.07)))
-                    ctx.stroke(p, with: .color(ink.opacity(0.3)), lineWidth: 0.35)
-                }
+                if on, let ring = pool(item) { pools.addPath(poly(ring.map { v.point($0) })) }
             }
+            var floor = ctx
+            floor.clip(to: poly([v.point(0, 0), v.point(W, 0), v.point(W, D), v.point(0, D)]))
+            floor.fill(pools, with: .color(ink.opacity(0.06)), style: FillStyle(eoFill: false))
+            floor.stroke(pools, with: .color(ink.opacity(0.28)), lineWidth: 0.35)
         }
 
         if dimensions {
@@ -285,7 +287,7 @@ struct AxoDrawing {
         let spread = LightMath.spread(item, in: plot)
         let centre: Point2, rx: Double, ry: Double, dir: Double
         if spread >= 300 {
-            centre = item.position; rx = 0.9; ry = 0.9; dir = 0
+            centre = item.position; rx = 0.6; ry = 0.6; dir = 0
         } else {
             let toTalent = item.position.bearing(to: plot.talent)
             let aimed = LightMath.angleBetween(toTalent, item.angle) <= 25
@@ -295,10 +297,10 @@ struct AxoDrawing {
             dir = aimed ? toTalent * .pi / 180 : a
             let flat = item.position.distance(to: centre), slant = (flat * flat + z * z).squareRoot()
             let half = min(80, spread / 2) * .pi / 180
-            ry = min(2.6, max(0.35, slant * tan(half)))
+            ry = min(1.3, max(0.35, slant * tan(half) * 0.6))
             // Long along the throw when the head is low, near round when it's overhead.
             let grazing = max(0.45, z / max(0.1, slant))
-            rx = min(3.2, ry / grazing)
+            rx = min(1.9, ry / grazing)
         }
         let c = cos(dir), s = sin(dir)
         return (0..<32).map { k in
