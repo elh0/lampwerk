@@ -455,10 +455,9 @@ struct RigPage: View {
     private func rigged(_ g: RigGroup) -> String {
         guard let first = g.items.first, let lamp = g.lamp else { return "" }
         let throwM = first.position.distance(to: plot.talent)
-        if lamp.isGrip { return String(format: "Stands, %.1f\u{00A0}m off", throwM) }
+        if lamp.isGrip { return String(format: "Stands\n%.1f\u{00A0}m off", throwM) }
         let h = IsoCanvas.height(first)
-        let hs = g.items.count > 1 ? "Heads" : "Head"
-        return String(format: "\(hs) %.1f\u{00A0}m, %.1f\u{00A0}m to talent", h, throwM)
+        return String(format: "%.1f\u{00A0}m high\n%.1f\u{00A0}m throw", h, throwM)
     }
 
     private func row(_ a: String, _ b: String, _ c: String, _ d: String, header: Bool = false) -> some View {
@@ -472,7 +471,7 @@ struct RigPage: View {
         .font(Fonts.mono(7, .regular))
         .foregroundStyle(header ? Palette.ink.opacity(0.45) : Palette.ink)
         .padding(.vertical, 6)
-        .overlay(alignment: .top) { Rectangle().fill(Palette.ink.opacity(0.15)).frame(height: 0.5) }
+        .overlay(alignment: .top) { Rectangle().fill(Palette.ink.opacity(0.2)).frame(height: 0.75) }
     }
 }
 
