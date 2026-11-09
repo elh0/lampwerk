@@ -277,7 +277,7 @@ struct AxoDrawing {
             }
             c.stroke(stand, with: .color(line), lineWidth: 0.7)
         }
-        head(c, v, item, lamp, z: z, a: a, on: on, opacity: o)
+        self.head(c, v, item, lamp, z: z, a: a, on: on, opacity: o)
         modifier(c, v, item, z: z, a: a, opacity: o)
     }
 
