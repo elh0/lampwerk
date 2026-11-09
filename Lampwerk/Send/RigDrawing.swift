@@ -713,11 +713,12 @@ struct RigPost: View {
             .padding(.bottom, 10)
             Rectangle().fill(Palette.ink.opacity(0.15)).frame(height: 0.75)
             Canvas { ctx, size in
-                AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: pitch, shot: focus, type: 1.35).draw(ctx, size: size)
+                // A tall frame wants a steeper view, so the room fills it instead of floating in white.
+                AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: max(pitch, 0.98), shot: focus, type: 1.2).draw(ctx, size: size)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             HStack(alignment: .bottom) {
-                Text(String(format: "%d lamps · %.1f × %.1f m · inked = on", plot.items.filter { $0.lamp?.isLight == true }.count, plot.roomWidth, plot.roomDepth))
+                Text(String(format: "%d lamps · %.1f × %.1f m · inked = on", plot.items.filter { $0.lamp != nil }.count, plot.roomWidth, plot.roomDepth))
                     .font(Fonts.mono(9, .regular)).foregroundStyle(Palette.ink.opacity(0.45))
                 Spacer()
                 Image("Mark").resizable().scaledToFit().frame(height: 18).foregroundStyle(Palette.ink)
