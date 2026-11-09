@@ -31,6 +31,16 @@ enum RigSample {
                     try? FileManager.default.copyItem(at: url, to: dest)
                 }
             }
+            if let url = Export.rigDrawingPDF(plot, yaw: IsoProjection.defaultYaw, pitch: IsoProjection.defaultPitch, setOnly: false, focus: .close, withSections: false) {
+                let dest = out.appending(path: "\(tag)-close.pdf")
+                try? FileManager.default.removeItem(at: dest)
+                try? FileManager.default.copyItem(at: url, to: dest)
+            }
+            for (n, url) in Export.postImages(plot, yaw: IsoProjection.defaultYaw, pitch: IsoProjection.defaultPitch).enumerated() {
+                let dest = out.appending(path: "\(tag)-post-\(n + 1).png")
+                try? FileManager.default.removeItem(at: dest)
+                try? FileManager.default.copyItem(at: url, to: dest)
+            }
         }
     }
 }

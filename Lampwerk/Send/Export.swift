@@ -34,11 +34,11 @@ enum Export {
 
     /// The rig drawing: page one the whole rig with its table, page two light in sections when the setups differ.
     /// Set only draws the room, talent and camera with no lamps, on one page.
-    static func rigDrawingPDF(_ plot: Plot, yaw: Double, pitch: Double, setOnly: Bool) -> URL? {
+    static func rigDrawingPDF(_ plot: Plot, yaw: Double, pitch: Double, setOnly: Bool, focus: Shot? = nil, withSections: Bool = true) -> URL? {
         let url = folder().appending(path: "\(fileName(plot))-\(setOnly ? "set" : "rig")-drawing.pdf")
         let groups = RigGroups.make(plot)
-        let sections = setOnly ? false : RigGroups.sections(plot, groups).count > 1
-        var pages: [AnyView] = [AnyView(RigPage(plot: plot, groups: groups, yaw: yaw, pitch: pitch, setOnly: setOnly, hasSections: sections))]
+        let sections = setOnly || !withSections ? false : RigGroups.sections(plot, groups).count > 1
+        var pages: [AnyView] = [AnyView(RigPage(plot: plot, groups: groups, yaw: yaw, pitch: pitch, setOnly: setOnly, hasSections: sections, focus: focus))]
         if sections { pages.append(AnyView(SectionsPage(plot: plot, groups: groups, yaw: yaw, pitch: pitch))) }
         var box = CGRect(x: 0, y: 0, width: 842, height: 595)
         guard let pdf = CGContext(url as CFURL, mediaBox: &box, nil) else { return nil }
@@ -52,6 +52,23 @@ enum Export {
         }
         pdf.closePDF()
         return url
+    }
+
+    /// Square-ish 4:5 pictures for Instagram: the rig, then light in sections when the setups differ.
+    static func postImages(_ plot: Plot, yaw: Double, pitch: Double, focus: Shot? = nil) -> [URL] {
+        let groups = RigGroups.make(plot)
+        var slides: [(String, AnyView)] = [("post-1", AnyView(RigPost(plot: plot, groups: groups, yaw: yaw, pitch: pitch, focus: focus)))]
+        if RigGroups.sections(plot, groups).count > 1 {
+            slides.append(("post-2", AnyView(SectionsPost(plot: plot, groups: groups, yaw: yaw, pitch: pitch))))
+        }
+        var urls: [URL] = []
+        for (tag, view) in slides {
+            let url = folder().appending(path: "\(fileName(plot))-\(tag).png")
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            if let data = renderer.uiImage?.pngData(), (try? data.write(to: url, options: .atomic)) != nil { urls.append(url) }
+        }
+        return urls
     }
 
     /// The room in 3D, from the angle it was left at in the editor.

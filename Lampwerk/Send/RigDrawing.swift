@@ -100,12 +100,15 @@ struct AxoDrawing {
     /// Call-outs to the side; off for the small drawings in light in sections.
     var callouts = true
     var dimensions = true
+    /// Scales the call-out and dimension type, e.g. up for a square post image.
+    var type: CGFloat = 1
 
     private let ink = Palette.ink
     private let paper = Palette.paper
 
     /// Width kept clear each side for the call-outs.
     static let column: CGFloat = 84
+    private var column: CGFloat { Self.column * type }
 
     func projection(in size: CGSize) -> IsoProjection {
         let W = plot.roomWidth, D = plot.roomDepth, rh = IsoProjection.roomHeight
@@ -124,7 +127,7 @@ struct AxoDrawing {
             }
         }
         let xs = pts.map(\.x), ys = pts.map(\.y)
-        let side: CGFloat = callouts ? Self.column : 4
+        let side: CGFloat = callouts ? column : 4
         let pad: CGFloat = dimensions ? 26 : 6
         let w = max(1, xs.max()! - xs.min()!), h = max(1, ys.max()! - ys.min()!)
         let scale = min((size.width - side * 2 - pad * 2) / w, (size.height - pad * 2 - 20) / h)
@@ -274,7 +277,7 @@ struct AxoDrawing {
             }
             c.stroke(stand, with: .color(line), lineWidth: 0.7)
         }
-        box(c, v, item.position, w: 0.46, d: 0.46, z: z - 0.15, h: 0.34, top: on ? ink : nil, opacity: o)
+        head(c, v, item, lamp, z: z, a: a, on: on, opacity: o)
         modifier(c, v, item, z: z, a: a, opacity: o)
     }
 
@@ -344,6 +347,102 @@ struct AxoDrawing {
         }
     }
 
+    /// The head, drawn by kind so a fresnel reads as a fresnel: a barrel with a lens, a COB body with its reflector,
+    /// a flat panel, an upright tube, a round practical. Inked = on: the body goes black, the face stays white.
+    private func head(_ c: GraphicsContext, _ v: IsoProjection, _ item: PlacedLamp, _ lamp: Lamp, z: Double, a: Double, on: Bool, opacity o: Double) {
+        let line = ink.opacity(o)
+        switch lamp.kind {
+        case .practical:
+            let r = max(0.14, min(1.0, lamp.width / 2))
+            let p = v.point(item.position, z), rs = r * v.scale
+            let ball = Path(ellipseIn: CGRect(x: p.x - rs, y: p.y - rs, width: rs * 2, height: rs * 2))
+            c.fill(ball, with: .color(on ? ink.opacity(0.18) : paper))
+            c.stroke(ball, with: .color(line), lineWidth: 0.8)
+            var equator = Path()
+            equator.addLines((0...24).map { k in
+                let t = Double(k) / 24 * 2 * .pi
+                return v.point(item.x + cos(t) * r, item.y + sin(t) * r, z)
+            })
+            c.stroke(equator, with: .color(ink.opacity(0.4 * o)), lineWidth: 0.4)
+        case .tube:
+            prism(c, v, item.position, aim: a, z: z - lamp.width / 2, length: 0.07, width: 0.07, height: lamp.width, on: on, opacity: o)
+        case .panel:
+            prism(c, v, item.position, aim: a, z: z - lamp.depth / 2, length: 0.09, width: lamp.width, height: max(0.3, lamp.depth), on: on, opacity: o, ribs: 3)
+        case .fresnel:
+            let w = max(0.26, lamp.width * 0.8), l = max(0.32, lamp.depth * 1.3)
+            prism(c, v, item.position, aim: a, z: z - w / 2, length: l, width: w, height: w, on: on, opacity: o, lens: true)
+            yoke(c, v, item.position, aim: a, z: z, half: w / 2 + 0.04, opacity: o)
+        case .point:
+            let w = max(0.22, lamp.width * 0.6), l = max(0.28, lamp.depth * 1.2)
+            prism(c, v, item.position, aim: a, z: z - w / 2, length: l, width: w, height: w, on: on, opacity: o)
+            if item.modifier == "None" {
+                // The bare reflector, opening forward.
+                let ca = cos(a), sa = sin(a), px = -sa, py = ca
+                func at(_ d: Double, _ s: Double, _ h: Double) -> CGPoint { v.point(item.x + ca * d + px * s, item.y + sa * d + py * s, z + h) }
+                let f = l / 2, r0 = w * 0.4, r1 = w * 0.75, d1 = f + 0.22
+                var dish = Path()
+                for (u, h) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                    dish.move(to: at(f, u * r0, h * r0)); dish.addLine(to: at(d1, u * r1, h * r1))
+                }
+                dish.addPath(poly([at(d1, -r1, -r1), at(d1, r1, -r1), at(d1, r1, r1), at(d1, -r1, r1)]))
+                c.stroke(dish, with: .color(line), lineWidth: 0.55)
+            }
+        default:
+            box(c, v, item.position, w: 0.46, d: 0.46, z: z - 0.15, h: 0.34, top: on ? ink : nil, opacity: o)
+        }
+    }
+
+    /// A box turned to the lamp's aim: `length` along the beam, `width` across, `height` up from `z`.
+    /// Faces turned towards you are drawn; when on, the body is inked and the front face stays white.
+    private func prism(_ c: GraphicsContext, _ v: IsoProjection, _ at: Point2, aim a: Double, z: Double,
+                       length: Double, width: Double, height: Double, on: Bool, opacity o: Double, ribs: Int = 0, lens: Bool = false) {
+        let ux = cos(a), uy = sin(a), wx = -uy, wy = ux
+        func corner(_ du: Double, _ dw: Double, _ dz: Double) -> CGPoint {
+            v.point(at.x + ux * du * length / 2 + wx * dw * width / 2, at.y + uy * du * length / 2 + wy * dw * width / 2, z + (dz + 1) / 2 * height)
+        }
+        // Toward the viewer, matching IsoProjection: (sin yaw cos pitch, cos yaw cos pitch, sin pitch).
+        let dx = sin(v.yaw) * cos(v.pitch), dy = cos(v.yaw) * cos(v.pitch), dz = sin(v.pitch)
+        let faces: [(n: (Double, Double, Double), pts: [(Double, Double, Double)], front: Bool)] = [
+            ((ux, uy, 0), [(1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1)], true),
+            ((-ux, -uy, 0), [(-1, -1, -1), (-1, 1, -1), (-1, 1, 1), (-1, -1, 1)], false),
+            ((wx, wy, 0), [(-1, 1, -1), (1, 1, -1), (1, 1, 1), (-1, 1, 1)], false),
+            ((-wx, -wy, 0), [(-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1)], false),
+            ((0, 0, 1), [(-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)], false),
+            ((0, 0, -1), [(-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1)], false),
+        ]
+        let line = ink.opacity(o)
+        for f in faces where f.n.0 * dx + f.n.1 * dy + f.n.2 * dz > 0 {
+            let path = poly(f.pts.map { corner($0.0, $0.1, $0.2) })
+            c.fill(path, with: .color(on && !f.front ? ink : paper))
+            c.stroke(path, with: .color(line), lineWidth: 0.75)
+            if f.front {
+                var detail = Path()
+                for k in 0..<ribs {
+                    let t = -1 + 2 * Double(k + 1) / Double(ribs + 1)
+                    detail.move(to: corner(1, t, -1)); detail.addLine(to: corner(1, t, 1))
+                }
+                if lens {
+                    detail.addLines((0...20).map { k in
+                        let t = Double(k) / 20 * 2 * .pi
+                        return corner(1, cos(t) * 0.7, sin(t) * 0.7)
+                    })
+                }
+                c.stroke(detail, with: .color(ink.opacity(0.6 * o)), lineWidth: 0.45)
+            }
+        }
+    }
+
+    /// The U-shaped yoke a fresnel hangs in, down to the stand.
+    private func yoke(_ c: GraphicsContext, _ v: IsoProjection, _ at: Point2, aim a: Double, z: Double, half: Double, opacity o: Double) {
+        let wx = -sin(a), wy = cos(a)
+        var y = Path()
+        y.move(to: v.point(at.x - wx * half, at.y - wy * half, z))
+        y.addLine(to: v.point(at.x - wx * half, at.y - wy * half, z - half - 0.08))
+        y.addLine(to: v.point(at.x + wx * half, at.y + wy * half, z - half - 0.08))
+        y.addLine(to: v.point(at.x + wx * half, at.y + wy * half, z))
+        c.stroke(y, with: .color(ink.opacity(o)), lineWidth: 0.6)
+    }
+
     /// A box from its floor centre, faces turned towards you, the lid inked when the head is on.
     private func box(_ c: GraphicsContext, _ v: IsoProjection, _ at: Point2, w: Double, d: Double, z: Double, h: Double, top: Color?, opacity o: Double) {
         let x0 = at.x - w / 2, x1 = at.x + w / 2, y0 = at.y - d / 2, y1 = at.y + d / 2, z1 = z + h
@@ -372,7 +471,7 @@ struct AxoDrawing {
         if abs(angle) > .pi / 2 { angle += .pi }
         g.translateBy(x: mid.x, y: mid.y)
         g.rotate(by: .radians(angle))
-        g.draw(Text(text).font(Fonts.mono(6.5, .regular)).foregroundStyle(ink.opacity(0.5)), at: CGPoint(x: 0, y: 8))
+        g.draw(Text(text).font(Fonts.mono(6.5 * type, .regular)).foregroundStyle(ink.opacity(0.5)), at: CGPoint(x: 0, y: 8 * type))
     }
 
     // MARK: Call-outs
@@ -399,11 +498,11 @@ struct AxoDrawing {
         all.append(Callout(anchor: tal, title: "TALENT", detail: "", y: tal.y))
 
         let mid = v.point(plot.roomWidth / 2, plot.roomDepth / 2).x
-        let leftX = Self.column - 6, rightX = size.width - Self.column + 6
+        let leftX = column - 6, rightX = size.width - column + 6
         for left in [true, false] {
             var side = all.filter { ($0.anchor.x < mid) == left }.sorted { $0.y < $1.y }
             // Push apart so no two labels touch.
-            let gap: CGFloat = 22
+            let gap: CGFloat = 22 * type
             for i in side.indices {
                 side[i].y = max(side[i].y, 14)
                 if i > 0 { side[i].y = max(side[i].y, side[i - 1].y + gap) }
@@ -421,10 +520,10 @@ struct AxoDrawing {
                 leader.addLine(to: CGPoint(x: x + (left ? 3 : -3), y: c.y))
                 ctx.stroke(leader, with: .color(ink.opacity(0.55)), lineWidth: 0.45)
                 let anchor: UnitPoint = left ? .trailing : .leading
-                ctx.draw(Text(c.title).font(Fonts.mono(7, .medium)).foregroundStyle(ink), at: CGPoint(x: x, y: c.y), anchor: anchor)
+                ctx.draw(Text(c.title).font(Fonts.mono(7 * type, .medium)).foregroundStyle(ink), at: CGPoint(x: x, y: c.y), anchor: anchor)
                 if !c.detail.isEmpty {
-                    ctx.draw(Text(c.detail).font(Fonts.mono(6, .regular)).foregroundStyle(ink.opacity(0.5)),
-                             at: CGPoint(x: x, y: c.y + 9), anchor: anchor)
+                    ctx.draw(Text(c.detail).font(Fonts.mono(6 * type, .regular)).foregroundStyle(ink.opacity(0.5)),
+                             at: CGPoint(x: x, y: c.y + 9 * type), anchor: anchor)
                 }
             }
         }
@@ -481,12 +580,19 @@ struct RigPage: View {
     var setOnly = false
     /// More than one look, so page two follows.
     var hasSections = false
+    /// Ink only what's on in this setup; nil inks the whole rig.
+    var focus: Shot? = nil
 
     private var line: String {
         let room = String(format: "Room %.1f × %.1f m.", plot.roomWidth, plot.roomDepth)
         if setOnly { return room + " The set, no lamps." }
         let lamps = plot.items.filter { $0.lamp != nil }.count
-        let tail = hasSections ? "Every lamp drawn; the setups follow." : "Same lamps in every setup."
+        let tail: String
+        if let focus {
+            tail = "Inked = on in the \(focus.title.lowercased()) setup."
+        } else {
+            tail = hasSections ? "Every lamp drawn; the setups follow." : "Same lamps in every setup."
+        }
         return room + " \(lamps) \(lamps == 1 ? "lamp" : "lamps") in \(groups.count) \(groups.count == 1 ? "group" : "groups"). " + tail
     }
 
@@ -495,7 +601,7 @@ struct RigPage: View {
             RigHeader(title: setOnly ? "The set" : "The rig", plot: plot, line: line)
             HStack(alignment: .center, spacing: 16) {
                 Canvas { ctx, size in
-                    AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: pitch, setOnly: setOnly).draw(ctx, size: size)
+                    AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: pitch, shot: focus, setOnly: setOnly).draw(ctx, size: size)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if !setOnly {
@@ -583,6 +689,90 @@ struct SectionsPage: View {
         }
         .padding(.horizontal, 40).padding(.vertical, 34)
         .frame(width: 842, height: 595)
+        .background(Palette.paper)
+    }
+}
+
+// MARK: Post images
+
+/// 4:5 for Instagram, drawn at 540 × 675 and rendered at 2x (1080 × 1350). Slide one: the rig with its call-outs.
+struct RigPost: View {
+    let plot: Plot
+    let groups: [RigGroup]
+    var yaw = IsoProjection.defaultYaw
+    var pitch = IsoProjection.defaultPitch
+    var focus: Shot? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(plot.name.uppercased()).font(Fonts.mono(11, .medium)).foregroundStyle(Palette.ink)
+                Spacer()
+                Text(focus.map { $0.title.uppercased() } ?? "THE RIG").font(Fonts.mono(11, .regular)).foregroundStyle(Palette.ink.opacity(0.45))
+            }
+            .padding(.bottom, 10)
+            Rectangle().fill(Palette.ink.opacity(0.15)).frame(height: 0.75)
+            Canvas { ctx, size in
+                AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: pitch, shot: focus, type: 1.35).draw(ctx, size: size)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(alignment: .bottom) {
+                Text(String(format: "%d lamps · %.1f × %.1f m · inked = on", plot.items.filter { $0.lamp?.isLight == true }.count, plot.roomWidth, plot.roomDepth))
+                    .font(Fonts.mono(9, .regular)).foregroundStyle(Palette.ink.opacity(0.45))
+                Spacer()
+                Image("Mark").resizable().scaledToFit().frame(height: 18).foregroundStyle(Palette.ink)
+            }
+        }
+        .padding(30)
+        .frame(width: 540, height: 675)
+        .background(Palette.paper)
+    }
+}
+
+/// Slide two: light in sections, stacked, one row per look.
+struct SectionsPost: View {
+    let plot: Plot
+    let groups: [RigGroup]
+    var yaw = IsoProjection.defaultYaw
+    var pitch = IsoProjection.defaultPitch
+
+    var body: some View {
+        let sections = RigGroups.sections(plot, groups)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(plot.name.uppercased()).font(Fonts.mono(11, .medium)).foregroundStyle(Palette.ink)
+                Spacer()
+                Text("LIGHT IN SECTIONS").font(Fonts.mono(11, .regular)).foregroundStyle(Palette.ink.opacity(0.45))
+            }
+            .padding(.bottom, 10)
+            Rectangle().fill(Palette.ink.opacity(0.15)).frame(height: 0.75)
+            VStack(spacing: 10) {
+                ForEach(Array(sections.prefix(3).enumerated()), id: \.offset) { _, s in
+                    HStack(alignment: .center, spacing: 12) {
+                        Canvas { ctx, size in
+                            AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: pitch, shot: s.shots[0],
+                                       callouts: false, dimensions: false).draw(ctx, size: size)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(s.shots.map { $0.title.uppercased() }.joined(separator: ", ")).foregroundStyle(Palette.ink)
+                            Text(s.letters.isEmpty ? "ALL OFF" : s.letters.joined(separator: " + ")).foregroundStyle(Palette.ink.opacity(0.45))
+                        }
+                        .font(Fonts.mono(9, .regular))
+                        .frame(width: 110, alignment: .leading)
+                    }
+                    .frame(maxHeight: .infinity)
+                }
+            }
+            .padding(.vertical, 12)
+            .frame(maxHeight: .infinity)
+            HStack(alignment: .bottom) {
+                Text("Inked = on").font(Fonts.mono(9, .regular)).foregroundStyle(Palette.ink.opacity(0.45))
+                Spacer()
+                Image("Mark").resizable().scaledToFit().frame(height: 18).foregroundStyle(Palette.ink)
+            }
+        }
+        .padding(30)
+        .frame(width: 540, height: 675)
         .background(Palette.paper)
     }
 }

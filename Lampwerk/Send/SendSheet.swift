@@ -17,6 +17,13 @@ struct SendSheet: View {
     @State private var drawing: URL?
     /// The drawing with no lamps: just the room, talent and camera.
     @State private var setOnly = false
+    /// Which setup the drawing inks; nil inks the whole rig.
+    @State private var focus: Shot?
+    @State private var withSections = true
+    @State private var posts: [URL] = []
+
+    /// Everything the drawing depends on, so it's remade when any of it changes.
+    private struct DrawingKey: Equatable { var setOnly: Bool; var focus: Shot?; var sections: Bool }
     @State private var preparing = true
 
     var body: some View {
@@ -50,12 +57,8 @@ struct SendSheet: View {
                     option(setOnly ? "Set drawing" : "Rig drawing",
                            setOnly ? "A4 PDF: the room drawn in ink, no lamps." : "A4 PDF: the room drawn in ink, lamps lettered, a rig table, and one drawing per setup.",
                            url: drawing)
-                    Toggle(isOn: $setOnly) {
-                        Text("Set only, no lamps").font(.lwChip).foregroundStyle(Palette.quiet)
-                    }
-                    .tint(Palette.gel)
-                    .padding(.vertical, 8)
-                    .overlay(alignment: .bottom) { Rectangle().fill(Palette.rule).frame(height: 1) }
+                    drawingSettings
+                    postsOption
                     textOption
                     liveLink
                 }
@@ -72,8 +75,9 @@ struct SendSheet: View {
         }
         .background(Palette.p1)
         // Remake the files whenever a name changes, once typing settles.
-        .task(id: setOnly) {
-            drawing = Export.rigDrawingPDF(plot, yaw: yaw, pitch: pitch, setOnly: setOnly)
+        .task(id: DrawingKey(setOnly: setOnly, focus: focus, sections: withSections)) {
+            drawing = Export.rigDrawingPDF(plot, yaw: yaw, pitch: pitch, setOnly: setOnly, focus: focus, withSections: withSections)
+            posts = Export.postImages(plot, yaw: yaw, pitch: pitch, focus: focus)
         }
         .task(id: plot) {
             preparing = true
@@ -82,7 +86,8 @@ struct SendSheet: View {
             pdf = Export.gafferSheetPDF(plot, supply: supply)
             image = Export.planImage(plot)
             image3D = Export.isoImage(plot, yaw: yaw, pitch: pitch)
-            drawing = Export.rigDrawingPDF(plot, yaw: yaw, pitch: pitch, setOnly: setOnly)
+            drawing = Export.rigDrawingPDF(plot, yaw: yaw, pitch: pitch, setOnly: setOnly, focus: focus, withSections: withSections)
+            posts = Export.postImages(plot, yaw: yaw, pitch: pitch, focus: focus)
             preparing = false
         }
     }
@@ -117,6 +122,54 @@ struct SendSheet: View {
             .buttonStyle(.plain)
         } else {
             row(title, preparing ? "Preparing…" : "Couldn't make this file. Try again.", trailing: "")
+        }
+    }
+
+    /// How the drawing reads: which setup is inked, the sections page, or the set alone.
+    private var drawingSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text("Inked").font(.lwChip).foregroundStyle(Palette.quiet).frame(width: 54, alignment: .leading)
+                chip("All", on: focus == nil) { focus = nil }
+                ForEach(Shot.allCases, id: \.self) { shot in
+                    chip(shot.title, on: focus == shot) { focus = shot }
+                }
+            }
+            .opacity(setOnly ? 0.4 : 1)
+            .disabled(setOnly)
+            Toggle(isOn: $withSections) {
+                Text("Light in sections page").font(.lwChip).foregroundStyle(Palette.quiet)
+            }
+            .tint(Palette.gel)
+            .disabled(setOnly)
+            Toggle(isOn: $setOnly) {
+                Text("Set only, no lamps").font(.lwChip).foregroundStyle(Palette.quiet)
+            }
+            .tint(Palette.gel)
+        }
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) { Rectangle().fill(Palette.rule).frame(height: 1) }
+    }
+
+    private func chip(_ title: String, on: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.lwChip)
+                .foregroundStyle(on ? Palette.p0 : Palette.text)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(on ? Palette.text : Palette.p2, in: RoundedRectangle(cornerRadius: Radius.chip))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var postsOption: some View {
+        if !posts.isEmpty, !preparing {
+            ShareLink(items: posts) {
+                row("Post images", posts.count > 1 ? "4:5 for Instagram: the rig, then light in sections." : "4:5 for Instagram: the rig.", trailing: "Send")
+            }
+            .buttonStyle(.plain)
+        } else {
+            row("Post images", preparing ? "Preparing…" : "Couldn't make these. Try again.", trailing: "")
         }
     }
 
