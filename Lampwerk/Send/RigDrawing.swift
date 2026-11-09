@@ -102,6 +102,8 @@ struct AxoDrawing {
     var dimensions = true
     /// Scales the call-out and dimension type, e.g. up for a square post image.
     var type: CGFloat = 1
+    /// Just the group letter beside each head, for a tall frame with the key underneath instead of call-outs.
+    var lettersOnly = false
 
     private let ink = Palette.ink
     private let paper = Palette.paper
@@ -127,7 +129,7 @@ struct AxoDrawing {
             }
         }
         let xs = pts.map(\.x), ys = pts.map(\.y)
-        let side: CGFloat = callouts ? column : 4
+        let side: CGFloat = callouts && !lettersOnly ? column : 14
         let pad: CGFloat = dimensions ? 26 : 6
         let w = max(1, xs.max()! - xs.min()!), h = max(1, ys.max()! - ys.min()!)
         let scale = min((size.width - side * 2 - pad * 2) / w, (size.height - pad * 2 - 20) / h)
@@ -201,7 +203,7 @@ struct AxoDrawing {
         }
         for (_, paint) in items.sorted(by: { $0.0 < $1.0 }) { paint(ctx) }
 
-        if callouts { labels(ctx, v, size: size) }
+        if callouts { lettersOnly ? letters(ctx, v) : labels(ctx, v, size: size) }
     }
 
     // MARK: Pieces
@@ -484,6 +486,24 @@ struct AxoDrawing {
     }
 
     /// Letters and names out to either side of the room, leaders running in to what they name.
+    /// A letter by each lamp in the group, and small CAMERA / TALENT tags.
+    private func letters(_ ctx: GraphicsContext, _ v: IsoProjection) {
+        if !setOnly {
+            for g in groups {
+                for item in g.items {
+                    guard let lamp = item.lamp else { continue }
+                    let p = lamp.isGrip ? v.point(item.position, 2.5) : v.point(item.position, IsoCanvas.height(item) + 0.25)
+                    ctx.draw(Text(g.letter).font(Fonts.mono(8 * type, .medium)).foregroundStyle(ink),
+                             at: CGPoint(x: p.x + 7 * type, y: p.y - 7 * type), anchor: .bottomLeading)
+                }
+            }
+        }
+        for (p, name) in [(v.point(plot.camera, 1.6), "CAMERA"), (v.point(plot.talent, 1.8), "TALENT")] {
+            ctx.draw(Text(name).font(Fonts.mono(6 * type, .regular)).foregroundStyle(ink.opacity(0.55)),
+                     at: CGPoint(x: p.x, y: p.y - 6 * type), anchor: .bottom)
+        }
+    }
+
     private func labels(_ ctx: GraphicsContext, _ v: IsoProjection, size: CGSize) {
         var all: [Callout] = []
         if !setOnly {
@@ -713,10 +733,11 @@ struct RigPost: View {
             .padding(.bottom, 10)
             Rectangle().fill(Palette.ink.opacity(0.15)).frame(height: 0.75)
             Canvas { ctx, size in
-                // A tall frame wants a steeper view, so the room fills it instead of floating in white.
-                AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: max(pitch, 0.98), shot: focus, type: 1.2).draw(ctx, size: size)
+                // Letters on the drawing and the key underneath, so the room can use the full width.
+                AxoDrawing(plot: plot, groups: groups, yaw: yaw, pitch: pitch, shot: focus, type: 1.3, lettersOnly: true).draw(ctx, size: size)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            key
             HStack(alignment: .bottom) {
                 Text(String(format: "%d lamps · %.1f × %.1f m · inked = on", plot.items.filter { $0.lamp != nil }.count, plot.roomWidth, plot.roomDepth))
                     .font(Fonts.mono(9, .regular)).foregroundStyle(Palette.ink.opacity(0.45))
@@ -727,6 +748,29 @@ struct RigPost: View {
         .padding(30)
         .frame(width: 540, height: 675)
         .background(Palette.paper)
+    }
+
+    /// The groups in two columns: letter, name, then what.
+    private var key: some View {
+        let half = (groups.count + 1) / 2
+        return HStack(alignment: .top, spacing: 18) {
+            ForEach([Array(groups.prefix(half)), Array(groups.dropFirst(half))], id: \.first?.id) { column in
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(column) { g in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(g.letter).font(Fonts.mono(9, .medium)).foregroundStyle(Palette.ink).frame(width: 12, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(g.title.uppercased()).font(Fonts.mono(9, .medium)).foregroundStyle(Palette.ink)
+                                Text(g.short).font(Fonts.mono(8, .regular)).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        }
+        .padding(.top, 10).padding(.bottom, 18)
+        .overlay(alignment: .top) { Rectangle().fill(Palette.ink.opacity(0.15)).frame(height: 0.75) }
     }
 }
 
